@@ -43,9 +43,9 @@ It returns `false` plus a static message instead of asserting, so tests can repo
 
 | Layer | Files | Purpose |
 |---|---|---|
-| Unit | `test_arena.cpp`, `test_heap_unit.cpp`, `test_split.cpp`, `test_coalesce.cpp`, `test_alignment.cpp` | One behaviour per test on a fresh, small `Heap`. Exact assertions on addresses, block sizes, free-list counts. |
-| Randomised stress | `test_stress.cpp` | Seeded alloc/free sequences with `check()` after **every** operation. Each block is filled with a per-block byte pattern that is verified before free, so overlapping blocks are caught even if the headers look valid. One configuration uses a 64 KiB arena to keep the OOM path constantly exercised, and asserts that OOM actually occurred. Since Phase 3, each seed must also end with exactly one free block spanning the arena. |
-| Integration | `test_api_integration.cpp` | The public C API on the real 256 MiB process heap, used like a program would: linked lists, strings, a 32 MiB block, and death tests that a double or invalid free aborts with a diagnostic. |
+| Unit | `test_arena.cpp`, `test_heap_unit.cpp`, `test_split.cpp`, `test_coalesce.cpp`, `test_realloc.cpp`, `test_alignment.cpp` | One behaviour per test on a fresh, small `Heap`. Exact assertions on addresses, block sizes, free-list counts. |
+| Randomised stress | `test_stress.cpp` | Seeded alloc/free sequences with `check()` after **every** operation. Each block is filled with a per-block byte pattern that is verified before free, so overlapping blocks are caught even if the headers look valid. One configuration uses a 64 KiB arena to keep the OOM path constantly exercised, and asserts that OOM actually occurred. Since Phase 3, each seed must also end with exactly one free block spanning the arena. Since Phase 4, two extra configurations mix in 25% realloc ops (prefix preserved, failed realloc leaves the original intact); the original three configurations are unchanged so their timings stay comparable. |
+| Integration | `test_api_integration.cpp` | The public C API on the real 256 MiB process heap, used like a program would: linked lists, strings, a 32 MiB block, a `my_realloc` string builder, a `my_calloc` matrix, `std::vector` and `std::map<int, basic_string>` on `my_malloc` via a test-only allocator adapter, and death tests that a double or invalid free/realloc aborts with a diagnostic. |
 
 `Heap::free` returns a status (`Ok`, `InvalidPointer`, `DoubleFree`) so error handling is unit-testable without death tests. Only the C wrapper aborts, and that path is covered by integration death tests.
 
@@ -69,6 +69,6 @@ Tests build in Debug with UBSan on. `check()` is never called from benchmark bui
 - Freeing an *interior* pointer (into the middle of a block) cannot be detected in general: the 8 bytes before it are arbitrary payload data. Pointers outside the arena or misaligned are rejected.
 
 ## Validation
-- Test count: 31 at the end of Phase 1, 40 at the end of Phase 2, 51 at the end of Phase 3 (all passing under UBSan).
+- Test count: 31 at the end of Phase 1, 40 at the end of Phase 2, 51 at the end of Phase 3, 78 at the end of Phase 4 (all passing under UBSan).
 - Mutation check (2026-10-24): deleting the `footer(h)->word = sz;` line in `Heap::free` makes the unit tests fail with `heap_check: footer disagrees with header` (e.g. `HeapUnit.AllocReturnsUsableMemory`, `HeapUnit.FirstFitSkipsTooSmallBlocks`). Restoring the line makes them pass again. Repeat this kind of check when adding invariants: a checker that never fails proves nothing.
-- Phase 3 mutation checks (disabling the backward merge; not clearing the successor's prev-allocated bit) are recorded in [ADR-006](006-coalescing.md#validation). Each is caught by 14 or more tests with the specific invariant message.
+- Phase 3 mutation checks (disabling the backward merge; not clearing the successor's prev-allocated bit) are recorded in [ADR-006](006-coalescing.md#validation). Each is caught by 14 or more tests with the specific invariant message. Phase 4 mutation checks (shrink tail not released; truncated copy on move) are in [ADR-007](007-realloc-and-calloc.md#validation).

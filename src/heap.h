@@ -6,6 +6,7 @@
 
 namespace myalloc {
 
+// Result of validating a pointer passed to free/realloc.
 enum class FreeStatus { Ok, InvalidPointer, DoubleFree };
 
 struct HeapStats {
@@ -14,6 +15,9 @@ struct HeapStats {
     std::size_t live_blocks = 0;
     std::size_t high_water = 0;     // highest arena offset ever handed out (footprint proxy)
     std::size_t free_blocks = 0;
+    std::size_t realloc_in_place = 0;  // served without moving (shrink, no-op, or grow into next)
+    std::size_t realloc_moved = 0;     // malloc + copy + free
+    std::size_t realloc_bytes_copied = 0;
 };
 
 struct FreeSummary {
@@ -26,13 +30,17 @@ struct FreeSummary {
 // The arena starts as one free block followed by a zero-size allocated
 // epilogue header; oversized free blocks are split on allocation (ADR-005)
 // and freed blocks merge with free neighbours in both directions (ADR-006).
-// Single-threaded.
+// realloc resizes in place where possible (ADR-007). Single-threaded.
 class Heap {
 public:
     bool init(std::size_t arena_bytes);
 
     void* malloc(std::size_t n);
     FreeStatus free(void* p);
+    // On failure returns nullptr and leaves p untouched. If `status` is
+    // non-null it receives the validation result for p.
+    void* realloc(void* p, std::size_t n, FreeStatus* status = nullptr);
+    void* calloc(std::size_t count, std::size_t size);
 
     // Walks the whole heap and the free list. Returns true if every invariant
     // holds; otherwise false and, if `why` is non-null, a static description.
@@ -45,7 +53,11 @@ public:
     const Arena& arena() const { return arena_; }
 
 private:
+    FreeStatus validate(void* p) const;
     Header* find_first_fit(std::size_t need) const;
+    void place(Header* h, std::size_t total, std::size_t need);
+    void release(Header* h);
+    void note_extent(Header* h);
     void list_push(Header* h);
     void list_remove(Header* h);
 
@@ -56,7 +68,7 @@ private:
     HeapStats stats_;
 };
 
-// Process-wide heap behind my_malloc / my_free (256 MiB, lazily created).
+// Process-wide heap behind the my_* C API (256 MiB, lazily created).
 Heap& default_heap();
 
 }  // namespace myalloc

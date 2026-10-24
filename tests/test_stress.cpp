@@ -1,5 +1,7 @@
 // Randomised stress: heap.check() after every operation, content integrity
-// verified on free, small arena so OOM paths are exercised constantly.
+// verified on free and on realloc, small arena so OOM paths are exercised
+// constantly. realloc_pct = 0 keeps the original Phase 1-3 op sequence, so
+// those configurations stay comparable across phases.
 #include <random>
 #include <vector>
 
@@ -12,7 +14,8 @@ struct Live {
     std::uint8_t tag;
 };
 
-std::size_t run(unsigned seed, std::size_t arena, std::size_t max_size, int ops) {
+std::size_t run(unsigned seed, std::size_t arena, std::size_t max_size, int ops,
+                unsigned realloc_pct = 0) {
     myalloc::Heap h;
     if (!h.init(arena)) { ADD_FAILURE() << "arena init"; return 0; }
     std::mt19937 rng(seed);
@@ -20,7 +23,22 @@ std::size_t run(unsigned seed, std::size_t arena, std::size_t max_size, int ops)
     std::size_t oom = 0;
     for (int i = 0; i < ops; ++i) {
         const bool do_alloc = live.empty() || (rng() % 100) < 55;
-        if (do_alloc) {
+        if (!live.empty() && realloc_pct && rng() % 100 < realloc_pct) {
+            Live& l = live[rng() % live.size()];
+            const std::size_t n = rng() % max_size;
+            EXPECT_TRUE(all_equal(l.p, l.n, l.tag)) << "corruption before realloc, op " << i;
+            auto* q = static_cast<unsigned char*>(h.realloc(l.p, n));
+            if (!q) {  // OOM: original must be untouched
+                ++oom;
+                EXPECT_TRUE(all_equal(l.p, l.n, l.tag)) << "failed realloc clobbered, op " << i;
+            } else {
+                const std::size_t kept = n < l.n ? n : l.n;
+                EXPECT_TRUE(all_equal(q, kept, l.tag)) << "realloc lost data, op " << i;
+                fill(q, n, l.tag);
+                l.p = q;
+                l.n = n;
+            }
+        } else if (do_alloc) {
             std::size_t n = rng() % max_size;
             auto* p = static_cast<unsigned char*>(h.malloc(n));
             if (!p) { ++oom; continue; }
@@ -60,4 +78,12 @@ TEST(Stress, TinyArenaConstantOom) {
     std::size_t oom = 0;
     for (unsigned s = 1; s <= 5; ++s) oom += run(s, 64u << 10, 4096, 10000);
     EXPECT_GT(oom, 0u) << "test is meant to exercise the out-of-memory path";
+}
+TEST(Stress, WithReallocMixedSizes) {
+    for (unsigned s = 1; s <= 5; ++s) run(s, 4u << 20, 8192, 10000, 25);
+}
+TEST(Stress, WithReallocTinyArena) {
+    std::size_t oom = 0;
+    for (unsigned s = 1; s <= 5; ++s) oom += run(s, 64u << 10, 4096, 10000, 25);
+    EXPECT_GT(oom, 0u) << "test is meant to exercise failed realloc";
 }

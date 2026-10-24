@@ -1,5 +1,7 @@
 #include "heap.h"
 
+#include <cstring>
+
 namespace myalloc {
 
 bool Heap::init(std::size_t arena_bytes) {
@@ -41,63 +43,34 @@ Header* Heap::find_first_fit(std::size_t need) const {
     return nullptr;
 }
 
-void* Heap::malloc(std::size_t n) {
-    if (arena_.base() == nullptr || n > arena_.size()) return nullptr;  // also guards overflow
-    const std::size_t need = block_size_for(n);
-
-    Header* h = find_first_fit(need);
-    if (!h) return nullptr;
-    list_remove(h);
-
-    const std::size_t have = block_size(h);
-    if (have - need >= kMinBlock) {
-        // Allocate the front, return the tail to the free list (ADR-005). The
-        // block after the tail already has its prev-alloc bit clear.
-        h->word = need | kAllocBit | (h->word & kPrevAllocBit);
+// Turns the space [h, h + total) into an allocated block of `need` bytes and
+// returns any remainder of at least kMinBlock to the free list (ADR-005).
+// Precondition: the space was free, so the block after it has its prev-alloc
+// bit clear; h's own prev-alloc bit is preserved.
+void Heap::place(Header* h, std::size_t total, std::size_t need) {
+    const std::uint64_t prev_bit = h->word & kPrevAllocBit;
+    if (total - need >= kMinBlock) {
+        h->word = need | kAllocBit | prev_bit;
         Header* rest = next_block(h);
-        rest->word = (have - need) | kPrevAllocBit;
+        rest->word = (total - need) | kPrevAllocBit;
         write_footer(rest);
         list_push(rest);
     } else {
-        h->word |= kAllocBit;
+        h->word = total | kAllocBit | prev_bit;
         next_block(h)->word |= kPrevAllocBit;
     }
-
-    const std::size_t end = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(next_block(h)) -
-                                                     static_cast<std::uint8_t*>(arena_.base()));
-    if (end > stats_.high_water) stats_.high_water = end;
-    stats_.bytes_in_use += block_size(h);
-    if (stats_.bytes_in_use > stats_.peak_in_use) stats_.peak_in_use = stats_.bytes_in_use;
-    ++stats_.live_blocks;
-    return payload(h);
 }
 
-FreeStatus Heap::free(void* p) {
-    if (p == nullptr) return FreeStatus::Ok;
-    auto* b = static_cast<std::uint8_t*>(p);
-    if (!arena_.contains(p) || reinterpret_cast<std::uintptr_t>(p) % kAlign != 0 ||
-        b - kHeaderSize < first_ || b - kHeaderSize >= epilogue_)
-        return FreeStatus::InvalidPointer;
-
-    Header* h = header_of(p);
-    if (!is_alloc(h)) return FreeStatus::DoubleFree;
-    const std::size_t sz = block_size(h);
-    if (sz < kMinBlock || sz % kAlign != 0 ||
-        reinterpret_cast<std::uint8_t*>(h) + sz > epilogue_)
-        return FreeStatus::InvalidPointer;
-
-    stats_.bytes_in_use -= sz;
-    --stats_.live_blocks;
-    // Clear the alloc bit first: if this block is absorbed into its
-    // predecessor, the stale header must still read as free so an immediate
-    // second free is reported as a double free.
+// Puts a block that is not on the free list back on it, merging with free
+// neighbours first (ADR-006). h's size and prev-alloc bit must be valid; its
+// alloc bit is cleared first so a stale header absorbed into the predecessor
+// still reads as free (immediate double free stays detectable). The epilogue
+// reads as allocated and the first block claims an allocated predecessor, so
+// neither direction needs a boundary check.
+void Heap::release(Header* h) {
     h->word &= ~kAllocBit;
-
-    // Coalesce with both neighbours (ADR-006). The epilogue reads as
-    // allocated, and the first block claims an allocated predecessor, so
-    // neither direction needs a boundary check.
     Header* merged = h;
-    std::size_t total = sz;
+    std::size_t total = block_size(h);
     Header* next = next_block(h);
     if (!is_alloc(next)) {
         list_remove(next);
@@ -112,7 +85,111 @@ FreeStatus Heap::free(void* p) {
     write_footer(merged);
     next_block(merged)->word &= ~kPrevAllocBit;
     list_push(merged);
+}
+
+void Heap::note_extent(Header* h) {
+    const std::size_t end = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(next_block(h)) -
+                                                     static_cast<std::uint8_t*>(arena_.base()));
+    if (end > stats_.high_water) stats_.high_water = end;
+    if (stats_.bytes_in_use > stats_.peak_in_use) stats_.peak_in_use = stats_.bytes_in_use;
+}
+
+void* Heap::malloc(std::size_t n) {
+    if (arena_.base() == nullptr || n > arena_.size()) return nullptr;  // also guards overflow
+    const std::size_t need = block_size_for(n);
+
+    Header* h = find_first_fit(need);
+    if (!h) return nullptr;
+    list_remove(h);
+    place(h, block_size(h), need);
+
+    stats_.bytes_in_use += block_size(h);
+    ++stats_.live_blocks;
+    note_extent(h);
+    return payload(h);
+}
+
+FreeStatus Heap::validate(void* p) const {
+    auto* b = static_cast<std::uint8_t*>(p);
+    if (!arena_.contains(p) || reinterpret_cast<std::uintptr_t>(p) % kAlign != 0 ||
+        b - kHeaderSize < first_ || b - kHeaderSize >= epilogue_)
+        return FreeStatus::InvalidPointer;
+
+    const Header* h = header_of(p);
+    if (!is_alloc(h)) return FreeStatus::DoubleFree;
+    const std::size_t sz = block_size(h);
+    if (sz < kMinBlock || sz % kAlign != 0 ||
+        reinterpret_cast<const std::uint8_t*>(h) + sz > epilogue_)
+        return FreeStatus::InvalidPointer;
     return FreeStatus::Ok;
+}
+
+FreeStatus Heap::free(void* p) {
+    if (p == nullptr) return FreeStatus::Ok;
+    const FreeStatus st = validate(p);
+    if (st != FreeStatus::Ok) return st;
+
+    Header* h = header_of(p);
+    stats_.bytes_in_use -= block_size(h);
+    --stats_.live_blocks;
+    release(h);
+    return FreeStatus::Ok;
+}
+
+void* Heap::realloc(void* p, std::size_t n, FreeStatus* status) {
+    if (status) *status = FreeStatus::Ok;
+    if (p == nullptr) return malloc(n);
+    const FreeStatus st = validate(p);
+    if (status) *status = st;
+    if (st != FreeStatus::Ok) return nullptr;
+    if (n > arena_.size()) return nullptr;  // also guards overflow in block_size_for
+
+    Header* h = header_of(p);
+    const std::size_t have = block_size(h);
+    const std::size_t need = block_size_for(n);
+
+    if (need <= have) {
+        // Shrink (or no-op) in place. The tail goes through release() so it
+        // merges with a free successor.
+        if (have - need >= kMinBlock) {
+            h->word = need | kAllocBit | (h->word & kPrevAllocBit);
+            Header* rest = next_block(h);
+            rest->word = (have - need) | kPrevAllocBit;
+            stats_.bytes_in_use -= have - need;
+            release(rest);
+        }
+        ++stats_.realloc_in_place;
+        return p;
+    }
+
+    // Grow in place by absorbing a free successor that is large enough.
+    Header* next = next_block(h);
+    if (!is_alloc(next) && have + block_size(next) >= need) {
+        list_remove(next);
+        place(h, have + block_size(next), need);
+        stats_.bytes_in_use += block_size(h) - have;
+        note_extent(h);
+        ++stats_.realloc_in_place;
+        return p;
+    }
+
+    // Move. Allocate before freeing so a failure leaves p intact.
+    void* q = malloc(n);
+    if (!q) return nullptr;
+    const std::size_t copy = have - kHeaderSize;  // < n, since need > have
+    std::memcpy(q, p, copy);
+    free(p);
+    ++stats_.realloc_moved;
+    stats_.realloc_bytes_copied += copy;
+    return q;
+}
+
+void* Heap::calloc(std::size_t count, std::size_t size) {
+    std::size_t n;
+    if (__builtin_mul_overflow(count, size, &n)) return nullptr;
+    void* p = malloc(n);
+    if (p) std::memset(p, 0, n);
+    return p;
 }
 
 bool Heap::check(const char** why) const {

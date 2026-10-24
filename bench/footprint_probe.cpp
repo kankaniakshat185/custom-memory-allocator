@@ -9,8 +9,14 @@
 //   utilisation       = peak_requested / high_water    (1.0 = no arena wasted)
 //   *_end             = free list at the end of the run, live blocks still held
 //                       (how shredded the free memory is)
+//
+// `footprint_probe realloc` instead compares, on the same seeded buffer-growth
+// workload: a naive malloc+copy+free policy; Heap::realloc (in place where
+// possible, ADR-007); and a control that uses Heap::realloc only for growth and
+// moves on shrink, to isolate the effect of in-place shrinking.
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <random>
 #include <vector>
 
@@ -114,7 +120,90 @@ void phase_shift() {
 
 }  // namespace
 
-int main() {
+struct Buf {
+    void* p;
+    std::size_t n;
+};
+
+// Growable buffers (vector/string-like doubling up to 64 KiB) interleaved with
+// small short-lived "noise" allocations that land next to them.
+enum class Policy { Naive, InPlace, GrowOnlyInPlace };
+
+void realloc_growth(Policy policy, std::size_t arena_mib) {
+    myalloc::Heap h;
+    if (!h.init(arena_mib << 20)) return;
+    std::mt19937 rng(4);
+    std::vector<Buf> bufs, noise;
+    std::size_t calls = 0, moved = 0, copied = 0, oom = 0, req = 0, peak_req = 0;
+    auto track = [&](std::ptrdiff_t delta) {
+        req = static_cast<std::size_t>(static_cast<std::ptrdiff_t>(req) + delta);
+        if (req > peak_req) peak_req = req;
+    };
+    auto drop = [&](std::vector<Buf>& v, std::size_t k) {
+        track(-static_cast<std::ptrdiff_t>(v[k].n));
+        h.free(v[k].p);
+        v[k] = v.back();
+        v.pop_back();
+    };
+    for (int i = 0; i < 200000; ++i) {
+        const unsigned r = rng() % 100;
+        if (r < 40 && !bufs.empty()) {
+            Buf& b = bufs[rng() % bufs.size()];
+            const std::size_t n = b.n >= 65536 ? 16 : b.n * 2;
+            ++calls;
+            void* q;
+            const bool move = policy == Policy::Naive || (policy == Policy::GrowOnlyInPlace && n < b.n);
+            if (move) {
+                q = h.malloc(n);
+                if (q) {
+                    const std::size_t c = n < b.n ? n : b.n;
+                    std::memcpy(q, b.p, c);
+                    h.free(b.p);
+                    ++moved;
+                    copied += c;
+                }
+            } else {
+                q = h.realloc(b.p, n);
+            }
+            if (!q) { ++oom; continue; }
+            track(static_cast<std::ptrdiff_t>(n) - static_cast<std::ptrdiff_t>(b.n));
+            b = {q, n};
+        } else if (r < 70) {
+            const std::size_t n = 16 + rng() % 241;
+            if (void* p = h.malloc(n)) { noise.push_back({p, n}); track(static_cast<std::ptrdiff_t>(n)); }
+            else ++oom;
+        } else if (r < 85 && !noise.empty()) {
+            drop(noise, rng() % noise.size());
+        } else if (r < 92 || bufs.empty()) {
+            if (void* p = h.malloc(16)) { bufs.push_back({p, 16}); track(16); }
+            else ++oom;
+        } else {
+            drop(bufs, rng() % bufs.size());
+        }
+    }
+    const auto& s = h.stats();
+    moved += s.realloc_moved;
+    copied += s.realloc_bytes_copied;
+    const char* name = policy == Policy::Naive     ? "naive_move"
+                       : policy == Policy::InPlace ? "in_place"
+                                                   : "grow_in_place_shrink_moves";
+    const auto f = h.free_summary();
+    std::printf("%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%.3f,%zu,%zu\n", name, arena_mib, calls,
+                calls - moved, moved, copied, oom, peak_req, s.high_water,
+                s.high_water ? double(peak_req) / double(s.high_water) : 0.0, f.count, f.largest);
+}
+
+int main(int argc, char** argv) {
+    if (argc > 1 && std::strcmp(argv[1], "realloc") == 0) {
+        std::puts("policy,arena_mib,realloc_calls,in_place,moved,bytes_copied,oom,peak_requested,"
+                  "high_water,utilisation,free_blocks_end,largest_free_end");
+        for (std::size_t mib : {32, 64}) {
+            realloc_growth(Policy::Naive, mib);
+            realloc_growth(Policy::InPlace, mib);
+            realloc_growth(Policy::GrowOnlyInPlace, mib);
+        }
+        return 0;
+    }
     std::puts(
         "workload,ops,oom,peak_requested,peak_in_use,high_water,internal_overhead,utilisation,"
         "free_blocks_end,free_bytes_end,largest_free_end");
