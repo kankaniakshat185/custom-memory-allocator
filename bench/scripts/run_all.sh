@@ -17,6 +17,6 @@ summary="$out/timing-current.csv"
 raw="$out/timing-current-raw.csv"
 : > "$raw"
 env -u MallocNanoZone ./build/bench_timing --reps "$reps" --raw "$raw" \
-    --alloc system,heap,heap_naive_realloc,heap_growonly_realloc > "$summary"
+    --alloc system,heap,heap_bestfit,heap_naive_realloc,heap_growonly_realloc > "$summary"
 env MallocNanoZone=0 ./build/bench_timing --reps "$reps" --raw "$raw" --alloc system | tail -n +2 >> "$summary"
 column -s, -t "$summary"

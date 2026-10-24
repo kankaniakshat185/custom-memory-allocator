@@ -4,7 +4,8 @@
 
 namespace myalloc {
 
-bool Heap::init(std::size_t arena_bytes) {
+template <class Fit>
+bool BasicHeap<Fit>::init(std::size_t arena_bytes) {
     if (!arena_.init(arena_bytes)) return false;
     auto* base = static_cast<std::uint8_t*>(arena_.base());
     first_ = base + kHeaderSize;
@@ -20,7 +21,8 @@ bool Heap::init(std::size_t arena_bytes) {
     return true;
 }
 
-void Heap::list_push(Header* h) {
+template <class Fit>
+void BasicHeap<Fit>::list_push(Header* h) {
     FreeLinks* l = links(h);
     l->prev = nullptr;
     l->next = free_head_;
@@ -29,7 +31,8 @@ void Heap::list_push(Header* h) {
     ++stats_.free_blocks;
 }
 
-void Heap::list_remove(Header* h) {
+template <class Fit>
+void BasicHeap<Fit>::list_remove(Header* h) {
     FreeLinks* l = links(h);
     if (l->prev) links(l->prev)->next = l->next;
     else free_head_ = l->next;
@@ -37,17 +40,18 @@ void Heap::list_remove(Header* h) {
     --stats_.free_blocks;
 }
 
-Header* Heap::find_first_fit(std::size_t need) const {
-    for (Header* h = free_head_; h; h = links(h)->next)
-        if (block_size(h) >= need) return h;
-    return nullptr;
+template <class Fit>
+Header* BasicHeap<Fit>::find_fit(std::size_t need) {
+    ++stats_.mallocs;
+    return Fit::find(free_head_, need, stats_.search_steps);
 }
 
 // Turns the space [h, h + total) into an allocated block of `need` bytes and
 // returns any remainder of at least kMinBlock to the free list (ADR-005).
 // Precondition: the space was free, so the block after it has its prev-alloc
 // bit clear; h's own prev-alloc bit is preserved.
-void Heap::place(Header* h, std::size_t total, std::size_t need) {
+template <class Fit>
+void BasicHeap<Fit>::place(Header* h, std::size_t total, std::size_t need) {
     const std::uint64_t prev_bit = h->word & kPrevAllocBit;
     if (total - need >= kMinBlock) {
         h->word = need | kAllocBit | prev_bit;
@@ -67,7 +71,8 @@ void Heap::place(Header* h, std::size_t total, std::size_t need) {
 // still reads as free (immediate double free stays detectable). The epilogue
 // reads as allocated and the first block claims an allocated predecessor, so
 // neither direction needs a boundary check.
-void Heap::release(Header* h) {
+template <class Fit>
+void BasicHeap<Fit>::release(Header* h) {
     h->word &= ~kAllocBit;
     Header* merged = h;
     std::size_t total = block_size(h);
@@ -87,18 +92,20 @@ void Heap::release(Header* h) {
     list_push(merged);
 }
 
-void Heap::note_extent(Header* h) {
+template <class Fit>
+void BasicHeap<Fit>::note_extent(Header* h) {
     const std::size_t end = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(next_block(h)) -
                                                      static_cast<std::uint8_t*>(arena_.base()));
     if (end > stats_.high_water) stats_.high_water = end;
     if (stats_.bytes_in_use > stats_.peak_in_use) stats_.peak_in_use = stats_.bytes_in_use;
 }
 
-void* Heap::malloc(std::size_t n) {
+template <class Fit>
+void* BasicHeap<Fit>::malloc(std::size_t n) {
     if (arena_.base() == nullptr || n > arena_.size()) return nullptr;  // also guards overflow
     const std::size_t need = block_size_for(n);
 
-    Header* h = find_first_fit(need);
+    Header* h = find_fit(need);
     if (!h) return nullptr;
     list_remove(h);
     place(h, block_size(h), need);
@@ -109,7 +116,8 @@ void* Heap::malloc(std::size_t n) {
     return payload(h);
 }
 
-FreeStatus Heap::validate(void* p) const {
+template <class Fit>
+FreeStatus BasicHeap<Fit>::validate(void* p) const {
     auto* b = static_cast<std::uint8_t*>(p);
     if (!arena_.contains(p) || reinterpret_cast<std::uintptr_t>(p) % kAlign != 0 ||
         b - kHeaderSize < first_ || b - kHeaderSize >= epilogue_)
@@ -124,7 +132,8 @@ FreeStatus Heap::validate(void* p) const {
     return FreeStatus::Ok;
 }
 
-FreeStatus Heap::free(void* p) {
+template <class Fit>
+FreeStatus BasicHeap<Fit>::free(void* p) {
     if (p == nullptr) return FreeStatus::Ok;
     const FreeStatus st = validate(p);
     if (st != FreeStatus::Ok) return st;
@@ -136,7 +145,8 @@ FreeStatus Heap::free(void* p) {
     return FreeStatus::Ok;
 }
 
-void* Heap::realloc(void* p, std::size_t n, FreeStatus* status) {
+template <class Fit>
+void* BasicHeap<Fit>::realloc(void* p, std::size_t n, FreeStatus* status) {
     if (status) *status = FreeStatus::Ok;
     if (p == nullptr) return malloc(n);
     const FreeStatus st = validate(p);
@@ -184,7 +194,8 @@ void* Heap::realloc(void* p, std::size_t n, FreeStatus* status) {
     return q;
 }
 
-void* Heap::calloc(std::size_t count, std::size_t size) {
+template <class Fit>
+void* BasicHeap<Fit>::calloc(std::size_t count, std::size_t size) {
     std::size_t n;
     if (__builtin_mul_overflow(count, size, &n)) return nullptr;
     void* p = malloc(n);
@@ -192,7 +203,8 @@ void* Heap::calloc(std::size_t count, std::size_t size) {
     return p;
 }
 
-bool Heap::check(const char** why) const {
+template <class Fit>
+bool BasicHeap<Fit>::check(const char** why) const {
     auto fail = [&](const char* m) {
         if (why) *why = m;
         return false;
@@ -242,7 +254,8 @@ bool Heap::check(const char** why) const {
     return true;
 }
 
-FreeSummary Heap::free_summary() const {
+template <class Fit>
+FreeSummary BasicHeap<Fit>::free_summary() const {
     FreeSummary s;
     for (Header* h = free_head_; h; h = links(h)->next) {
         const std::size_t sz = block_size(h);
@@ -252,5 +265,8 @@ FreeSummary Heap::free_summary() const {
     }
     return s;
 }
+
+template class BasicHeap<FirstFit>;
+template class BasicHeap<BestFit>;
 
 }  // namespace myalloc

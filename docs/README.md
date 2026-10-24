@@ -18,8 +18,8 @@
 | [004](adr/004-verification-strategy.md) | Verification strategy: invariant checker, tests, footprint probe | Accepted |
 | [005](adr/005-splitting.md) | Splitting | Accepted (Phase 2 untimeable) |
 | [006](adr/006-coalescing.md) | Coalescing with boundary tags and prev-allocated bit | Accepted (footprint + timing measured) |
-| [007](adr/007-realloc-and-calloc.md) | realloc (in place where possible) and calloc | Accepted provisionally (timing done; footprint revisit after 009) |
+| [007](adr/007-realloc-and-calloc.md) | realloc (in place where possible) and calloc | Accepted (resolved by 009) |
 | [008](adr/008-benchmark-methodology.md) | Benchmark methodology: trace replay, batch timing, controlled libmalloc baseline | Accepted (native arm64 results) |
-| 009 | First-fit vs. best-fit | Planned |
+| [009](adr/009-first-fit-vs-best-fit.md) | Fit policy: first-fit vs. best-fit, compile-time | Accepted (first-fit default) |
 | 010 | Profiler findings | Planned |
-| 011 | Segregated lists | Conditional on profiling |
+| 011 | Segregated size-class free lists | Motivated by 009's measurements; scope decision pending (stretch) |

@@ -33,6 +33,7 @@ struct Result {
     std::size_t ops = 0, oom = 0, peak_req = 0;
 };
 
+template <class H>
 class Driver {
 public:
     explicit Driver(std::size_t arena) { ok_ = heap_.init(arena); }
@@ -58,15 +59,15 @@ public:
     void report(const char* name) const {
         const auto& s = heap_.stats();
         const auto f = heap_.free_summary();
-        std::printf("%s,%zu,%zu,%zu,%zu,%zu,%.3f,%.3f,%zu,%zu,%zu\n", name, r_.ops, r_.oom,
+        std::printf("%s,%zu,%zu,%zu,%zu,%zu,%.3f,%.3f,%zu,%zu,%zu,%.1f\n", name, r_.ops, r_.oom,
                     r_.peak_req, s.peak_in_use, s.high_water,
                     r_.peak_req ? double(s.peak_in_use) / double(r_.peak_req) : 0.0,
                     s.high_water ? double(r_.peak_req) / double(s.high_water) : 0.0, f.count,
-                    f.bytes, f.largest);
+                    f.bytes, f.largest, s.mallocs ? double(s.search_steps) / double(s.mallocs) : 0.0);
     }
 
 private:
-    myalloc::Heap heap_;
+    H heap_;
     bool ok_ = false;
     std::vector<Live> live_;
     std::size_t req_ = 0;
@@ -79,8 +80,9 @@ std::size_t log_uniform(std::mt19937& rng, double lo, double hi) {
 }
 
 // Random sizes 16 B..4 KiB, steady state around 2000 live blocks.
+template <class H>
 void random_sizes() {
-    Driver d(16u << 20);
+    Driver<H> d(16u << 20);
     std::mt19937 rng(1);
     for (int i = 0; i < 200000; ++i) {
         if (d.live() < 2000 || rng() % 2) d.alloc(log_uniform(rng, 16, 4096));
@@ -90,8 +92,9 @@ void random_sizes() {
 }
 
 // App-like: ~95% small (16..256 B), ~5% large (4..64 KiB).
+template <class H>
 void app_like() {
-    Driver d(32u << 20);
+    Driver<H> d(32u << 20);
     std::mt19937 rng(2);
     for (int i = 0; i < 200000; ++i) {
         if (d.live() < 3000 || rng() % 2) {
@@ -106,8 +109,9 @@ void app_like() {
 
 // Phase shift: fill with large blocks, free them all, then fill with small
 // blocks. Shows whether freed large blocks can serve small requests efficiently.
+template <class H>
 void phase_shift() {
-    Driver d(16u << 20);
+    Driver<H> d(16u << 20);
     std::mt19937 rng(3);
     for (int round = 0; round < 20; ++round) {
         for (int i = 0; i < 500; ++i) d.alloc(log_uniform(rng, 2048, 8192));
@@ -129,8 +133,9 @@ struct Buf {
 // small short-lived "noise" allocations that land next to them.
 enum class Policy { Naive, InPlace, GrowOnlyInPlace };
 
+template <class H>
 void realloc_growth(Policy policy, std::size_t arena_mib) {
-    myalloc::Heap h;
+    H h;
     if (!h.init(arena_mib << 20)) return;
     std::mt19937 rng(4);
     std::vector<Buf> bufs, noise;
@@ -188,26 +193,39 @@ void realloc_growth(Policy policy, std::size_t arena_mib) {
                        : policy == Policy::InPlace ? "in_place"
                                                    : "grow_in_place_shrink_moves";
     const auto f = h.free_summary();
-    std::printf("%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%.3f,%zu,%zu\n", name, arena_mib, calls,
+    std::printf("%s,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%.3f,%zu,%zu,%.1f\n", name, arena_mib, calls,
                 calls - moved, moved, copied, oom, peak_req, s.high_water,
-                s.high_water ? double(peak_req) / double(s.high_water) : 0.0, f.count, f.largest);
+                s.high_water ? double(peak_req) / double(s.high_water) : 0.0, f.count, f.largest,
+                s.mallocs ? double(s.search_steps) / double(s.mallocs) : 0.0);
 }
 
-int main(int argc, char** argv) {
-    if (argc > 1 && std::strcmp(argv[1], "realloc") == 0) {
+template <class H>
+int run(bool realloc_mode) {
+    if (realloc_mode) {
         std::puts("policy,arena_mib,realloc_calls,in_place,moved,bytes_copied,oom,peak_requested,"
-                  "high_water,utilisation,free_blocks_end,largest_free_end");
+                  "high_water,utilisation,free_blocks_end,largest_free_end,avg_search_steps");
         for (std::size_t mib : {32, 64}) {
-            realloc_growth(Policy::Naive, mib);
-            realloc_growth(Policy::InPlace, mib);
-            realloc_growth(Policy::GrowOnlyInPlace, mib);
+            realloc_growth<H>(Policy::Naive, mib);
+            realloc_growth<H>(Policy::InPlace, mib);
+            realloc_growth<H>(Policy::GrowOnlyInPlace, mib);
         }
         return 0;
     }
     std::puts(
         "workload,ops,oom,peak_requested,peak_in_use,high_water,internal_overhead,utilisation,"
-        "free_blocks_end,free_bytes_end,largest_free_end");
-    random_sizes();
-    app_like();
-    phase_shift();
+        "free_blocks_end,free_bytes_end,largest_free_end,avg_search_steps");
+    random_sizes<H>();
+    app_like<H>();
+    phase_shift<H>();
+    return 0;
+}
+
+// Usage: footprint_probe [realloc] [--best-fit]
+int main(int argc, char** argv) {
+    bool realloc_mode = false, best_fit = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "realloc") == 0) realloc_mode = true;
+        else if (std::strcmp(argv[i], "--best-fit") == 0) best_fit = true;
+    }
+    return best_fit ? run<myalloc::BestFitHeap>(realloc_mode) : run<myalloc::FirstFitHeap>(realloc_mode);
 }

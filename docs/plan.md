@@ -48,13 +48,13 @@ Slack is real slack. Do not spend it on Tier 2 before §7 is met.
 
 | # | Phase | Budget | Output | ADR |
 |---|---|---|---|---|
-| 0 | Scaffolding + toolchain verification | 0.5–1 d | CMake, GoogleTest (FetchContent), arena wrapper, `heap_check()` skeleton, Xcode/Instruments check, ASan diagnosis (timeboxed) | ADR-003 (arena) |
-| 1 | Baseline allocator: arena, headers, alignment, explicit free list, first-fit, no split/coalesce | 1.5 d | `my_malloc`/`my_free`, basic tests | ADR-001, ADR-002, ADR-004 (verification) |
-| 2 | Splitting | 0.5 d | Remainder to free list, min-split threshold | ADR-005 |
-| 3 | Coalescing (boundary tags, both directions) | 1.5 d | Coalescing tests, `heap_check()` invariants in every test | ADR-006 |
-| 4 | Realloc, calloc, double-free, OOM | 1 d | Full Tier 1 test suite | ADR-007 |
-| 5 | Benchmark harness: 3 workloads × {libmalloc, first-fit, best-fit} | 1.5 d | `bench/` binary, CSV output, plot script | ADR-008 (methodology) |
-| 6 | Best-fit variant + comparison (compile-time policy template) | 1 d | Variant selectable with no runtime branch | ADR-009 |
+| 0 ✅ | Scaffolding + toolchain verification | 0.5–1 d | CMake, GoogleTest (FetchContent), arena wrapper, `heap_check()` skeleton, Xcode/Instruments check, ASan diagnosis (timeboxed) | ADR-003 (arena) |
+| 1 ✅ | Baseline allocator: arena, headers, alignment, explicit free list, first-fit, no split/coalesce | 1.5 d | `my_malloc`/`my_free`, basic tests | ADR-001, ADR-002, ADR-004 (verification) |
+| 2 ✅ | Splitting | 0.5 d | Remainder to free list, min-split threshold | ADR-005 |
+| 3 ✅ | Coalescing (boundary tags, both directions) | 1.5 d | Coalescing tests, `heap_check()` invariants in every test | ADR-006 |
+| 4 ✅ | Realloc, calloc, double-free, OOM | 1 d | Full Tier 1 test suite | ADR-007 |
+| 5 ✅ | Benchmark harness: 3 workloads × {libmalloc, first-fit, best-fit} | 1.5 d | `bench/` binary, CSV output, plot script | ADR-008 (methodology) |
+| 6 ✅ | Best-fit variant + comparison (compile-time policy template) | 1 d | Variant selectable with no runtime branch | ADR-009 |
 | 7 | Profiling and analysis (Instruments) | 1.5 d | Profiler-backed "why" sections; segregated lists only if justified | ADR-010 (+ ADR-011 conditional) |
 | 8 | README, results table, ADR consistency pass | 1 d | Tag `v1.0` | – |
 

@@ -39,12 +39,17 @@ if(MYALLOC_ASAN)
   add_link_options(-fsanitize=address)
 endif()
 
-add_library(myalloc
-  src/arena.cpp
-  src/heap.cpp
-  src/myalloc.cpp
-)
+set(MYALLOC_SOURCES src/arena.cpp src/heap.cpp src/myalloc.cpp)
+
+# Default library: first-fit behind myalloc::Heap and the my_* C API.
+add_library(myalloc ${MYALLOC_SOURCES})
 target_include_directories(myalloc PUBLIC include PRIVATE src)
+
+# Same sources with best-fit as the default policy (ADR-009), so the whole test
+# suite, C API included, also runs against best-fit.
+add_library(myalloc_bestfit ${MYALLOC_SOURCES})
+target_include_directories(myalloc_bestfit PUBLIC include PRIVATE src)
+target_compile_definitions(myalloc_bestfit PUBLIC MYALLOC_BEST_FIT)
 
 enable_testing()
 include(FetchContent)
@@ -54,19 +59,27 @@ FetchContent_Declare(googletest
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(myalloc_tests
+set(MYALLOC_TEST_SOURCES
   tests/test_arena.cpp
   tests/test_heap_unit.cpp
   tests/test_split.cpp
   tests/test_coalesce.cpp
   tests/test_realloc.cpp
+  tests/test_fit_policy.cpp
   tests/test_alignment.cpp
   tests/test_stress.cpp
   tests/test_api_integration.cpp)
+include(GoogleTest)
+
+add_executable(myalloc_tests ${MYALLOC_TEST_SOURCES})
 target_link_libraries(myalloc_tests PRIVATE myalloc GTest::gtest_main)
 target_include_directories(myalloc_tests PRIVATE src)
-include(GoogleTest)
-gtest_discover_tests(myalloc_tests)
+gtest_discover_tests(myalloc_tests TEST_PREFIX "firstfit.")
+
+add_executable(myalloc_tests_bestfit ${MYALLOC_TEST_SOURCES})
+target_link_libraries(myalloc_tests_bestfit PRIVATE myalloc_bestfit GTest::gtest_main)
+target_include_directories(myalloc_tests_bestfit PRIVATE src)
+gtest_discover_tests(myalloc_tests_bestfit TEST_PREFIX "bestfit.")
 
 add_executable(footprint_probe bench/footprint_probe.cpp)
 target_link_libraries(footprint_probe PRIVATE myalloc)

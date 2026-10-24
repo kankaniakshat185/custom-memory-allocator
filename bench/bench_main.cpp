@@ -7,7 +7,8 @@
 // has (init/malloc/free/stats/arena); realloc is detected at compile time.
 //
 // Usage: bench_timing [--label L] [--reps N] [--alloc a,b] [--workload w,x] [--raw FILE]
-//   allocators: system, heap, heap_naive_realloc, heap_growonly_realloc
+//   allocators: system, heap, heap_naive_realloc, heap_growonly_realloc,
+//               heap_bestfit (trees with fit policies, ADR-009)
 //   MallocNanoZone=0 in the environment relabels "system" as "system_nano_off".
 #include <sys/sysctl.h>
 
@@ -128,7 +129,8 @@ RunResult replay(A& a, const Trace& t) {
 // first-touch faults that the warm system allocator does not (ADR-008).
 // Offset 64 in each page is zero payload in a fresh heap in every phase, so
 // writing 0 there changes no allocator state.
-void prefault(myalloc::Heap& h, std::size_t bytes) {
+template <class H>
+void prefault(H& h, std::size_t bytes) {
     auto* base = static_cast<volatile std::uint8_t*>(const_cast<void*>(h.arena().base()));
     const std::size_t ps = myalloc::page_size();
     for (std::size_t off = 0; off < bytes && off + 64 < h.arena().size(); off += ps) base[off + 64] = 0;
@@ -181,22 +183,22 @@ void report(const Options& o, const std::string& alloc, const Trace& t,
     std::fflush(stdout);
 }
 
-template <ReallocMode Mode>
+template <ReallocMode Mode, class H = myalloc::Heap>
 std::vector<RunResult> run_heap(const Trace& t, int reps) {
     std::size_t high_water;
     {  // warm-up on a fresh heap: discovers the pages this trace touches
-        myalloc::Heap h;
+        H h;
         if (!h.init(kArena)) return {};
-        HeapAlloc<Mode> a{h};
+        HeapAlloc<Mode, H> a{h};
         replay(a, t);
         high_water = h.stats().high_water;
     }
     std::vector<RunResult> runs;
     for (int r = 0; r < reps; ++r) {
-        auto h = std::make_unique<myalloc::Heap>();
+        auto h = std::make_unique<H>();
         if (!h->init(kArena)) return runs;
         prefault(*h, high_water);
-        HeapAlloc<Mode> a{*h};
+        HeapAlloc<Mode, H> a{*h};
         runs.push_back(replay(a, t));
     }
     return runs;
@@ -253,6 +255,10 @@ int main(int argc, char** argv) {
             else if (a == "heap") report(o, a, t, run_heap<ReallocMode::Native>(t, o.reps), raw);
             else if (a == "heap_naive_realloc") report(o, a, t, run_heap<ReallocMode::Naive>(t, o.reps), raw);
             else if (a == "heap_growonly_realloc") report(o, a, t, run_heap<ReallocMode::GrowOnly>(t, o.reps), raw);
+#ifdef MYALLOC_HAS_FIT_POLICIES
+            else if (a == "heap_bestfit")
+                report(o, a, t, run_heap<ReallocMode::Native, myalloc::BestFitHeap>(t, o.reps), raw);
+#endif
             else std::fprintf(stderr, "unknown allocator %s\n", a.c_str());
         }
     }

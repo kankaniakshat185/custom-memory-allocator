@@ -1,6 +1,6 @@
 # ADR-007: realloc (in place where possible) and calloc
 
-- Status: **Accepted provisionally.** Correctness is final. Timing measured (in-place 12% faster than naive). The in-place *policy* is to be re-evaluated after ADR-009 (fit policy); see "Revisit criteria".
+- Status: **Accepted.** Was provisional; resolved by [ADR-009](009-first-fit-vs-best-fit.md): the footprint bloat is a first-fit interaction (under best-fit, in-place is within 1% of naive), and in-place is faster (ADR-008). See "Revisit criteria" for the record.
 - Date: 2026-10-24
 - Environment: see [../environment.md](../environment.md)
 - Before: commit `0ad7359` (phase-3-coalescing), which had no realloc/calloc
@@ -78,9 +78,9 @@ The probe workload (`footprint_probe realloc`, seed 4, 200,000 ops) mixes growab
 - Grow-only sits between them but is too noisy to separate from in-place.
 - An earlier preliminary run suggested the opposite (naive fastest). That run was built for x86_64 and ran under Rosetta (ADR-008, Incidents), and is discarded.
 
-### Revisit criteria (why this is provisional)
+### Revisit criteria (resolved 2026-10-25)
 In-place realloc stays, because it is the standard design, it halves copying, and the code is verified. But the policy is re-decided once these two results exist:
-1. **ADR-009 (best-fit):** rerun `footprint_probe realloc` under best-fit. If the footprint gap to naive closes, the gap was a fit-policy interaction, and in-place stays.
+1. **ADR-009 (best-fit) — done:** under best-fit, in-place high-water is 5.67 MB vs. naive's 5.60 MB (+1%, was 2.1× under first-fit), bounded and with zero OOM. The gap was a fit-policy interaction. **In-place stays.**
 2. **Phase 5 timing — done:** the copy savings *do* show up as time (in-place 12% faster than naive). So the open trade-off is now purely **12% realloc speed vs. up to 2.1× footprint on this workload**, and (1) decides it: if best-fit closes the footprint gap, in-place stays without qualification.
 
 ### Other consequences

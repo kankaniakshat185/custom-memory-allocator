@@ -22,3 +22,10 @@ inline bool all_equal(const void* p, std::size_t n, std::uint8_t v) {
         if (b[i] != v) return false;
     return true;
 }
+
+#ifdef MYALLOC_BEST_FIT
+constexpr bool kBestFit = true;
+#else
+constexpr bool kBestFit = false;
+#endif
+
