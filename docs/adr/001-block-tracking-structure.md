@@ -22,10 +22,10 @@ Intrusive, explicit, doubly-linked free list, LIFO insertion, next/prev stored i
 ## Consequences
 - Pros: O(1) free + coalesce; no external metadata; fit policy isolated in `find_fit()`.
 - Cons: 32 B minimum block (quantify waste for tiny requests); O(free blocks) search; LIFO order may fragment more than address order.
-- **Measured impact:** footprint numbers per phase are in ADR-005 onward ([results/](../results/)). Timing (ns/op vs. libmalloc) and profiler explanation: TBD in Phase 5/7. The implicit-list reference point was not built; the comparison will be against libmalloc and between phases instead.
-- Limitation: baseline is libmalloc; Nano-zone control result (`MallocNanoZone=0`) TBD, or "no control possible".
+- **Measured impact:** footprint per phase in ADR-005 to 007; timing in ADR-008. On typical mixes the explicit list beats libmalloc's median (1.76× on random sizes, 1.12× on app-like), but its p99 batch cost is worse, and on `adversarial_holes` it is 53× slower (673.6 vs. 12.7 ns/op): the O(free blocks) search is the design's weak point. The implicit-list reference point was not built.
+- Limitation: the baseline is libmalloc, not glibc. The control experiment is possible on macOS: `MallocNanoZone=0` disables libmalloc's small-object fast path, costing it 5–17% (ADR-008).
 - Follow-ups: ADR-002 header layout, ADR-005 splitting, ADR-006 coalescing, ADR-009 fit policy.
 
 ## Validation
 - Hypothesis: allocation cost is dominated by free-list search length, which grows with fragmentation; O(1) free and coalesce keep `free` flat across workloads.
-- Result: TBD in Phase 5/7 (timing per workload, plus free-list length over time and a Time Profiler breakdown of `find_fit` vs. the rest).
+- Result: **partly supported** (ADR-008). The adversarial workload's bimodal batches (median 6.7 ns, p99 8.2 µs) are what a long `find_fit` walk looks like, and on typical mixes the median is low. Confirming that `find_fit` dominates, rather than inferring it, needs a Time Profiler breakdown (ADR-010).

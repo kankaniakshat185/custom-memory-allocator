@@ -1,6 +1,6 @@
 # ADR-007: realloc (in place where possible) and calloc
 
-- Status: **Accepted provisionally.** Correctness is final. The in-place *policy* is to be re-evaluated after ADR-009 (fit policy) and the Phase 5 timing benchmarks; see "Revisit criteria".
+- Status: **Accepted provisionally.** Correctness is final. Timing measured (in-place 12% faster than naive). The in-place *policy* is to be re-evaluated after ADR-009 (fit policy); see "Revisit criteria".
 - Date: 2026-10-24
 - Environment: see [../environment.md](../environment.md)
 - Before: commit `0ad7359` (phase-3-coalescing), which had no realloc/calloc
@@ -66,10 +66,22 @@ The probe workload (`footprint_probe realloc`, seed 4, 200,000 ops) mixes growab
 - **Mechanism: not yet established.** Working hypothesis, untested: with LIFO first-fit, the remainder that `place()` splits off after an in-place grow goes to the free-list head. The next small "noise" allocation is then carved from directly behind the grown buffer, which blocks its next in-place grow and forces a move further toward the arena end, leaving holes the buffer can't reuse. If that is right, the problem is the *interaction* of in-place grow with LIFO first-fit, not in-place grow itself. Best-fit (ADR-009) would route noise into small holes instead, which is the test.
 - **Scope of this result:** one synthetic workload, designed to be realloc-heavy. The three original workloads don't use realloc, so their numbers are unaffected (byte-identical, see above).
 
+### Timing (ADR-008; same run as the libmalloc comparison, median ns/op, `realloc_growth`)
+| Policy | ns/op | IQR | Batch p99 |
+|---|---|---|---|
+| **in-place (this ADR)** | **27.71** | 1.5% | 47.99 |
+| grow in place, move on shrink | 28.36 | 12.2% (noisy) | 52.78 |
+| naive (malloc + copy + free) | 31.58 | 0.7% | 59.16 |
+| libmalloc `realloc` (Nano on) | 37.75 | 1.0% | 59.62 |
+
+- **The copy savings do show up as time: in-place is 12% faster than naive** (27.71 vs. 31.58, both with tight IQRs), and 1.36× faster than libmalloc's realloc on this trace.
+- Grow-only sits between them but is too noisy to separate from in-place.
+- An earlier preliminary run suggested the opposite (naive fastest). That run was built for x86_64 and ran under Rosetta (ADR-008, Incidents), and is discarded.
+
 ### Revisit criteria (why this is provisional)
 In-place realloc stays, because it is the standard design, it halves copying, and the code is verified. But the policy is re-decided once these two results exist:
 1. **ADR-009 (best-fit):** rerun `footprint_probe realloc` under best-fit. If the footprint gap to naive closes, the gap was a fit-policy interaction, and in-place stays.
-2. **Phase 5 timing:** measure realloc-heavy throughput for all three policies. If the copy savings don't show up as time, and the footprint gap remains after (1), switch to grow-only, or to naive with a threshold.
+2. **Phase 5 timing — done:** the copy savings *do* show up as time (in-place 12% faster than naive). So the open trade-off is now purely **12% realloc speed vs. up to 2.1× footprint on this workload**, and (1) decides it: if best-fit closes the footprint gap, in-place stays without qualification.
 
 ### Other consequences
 - `realloc` never fails when shrinking, and growing in place needs no free-list search. Only the move path can fail.

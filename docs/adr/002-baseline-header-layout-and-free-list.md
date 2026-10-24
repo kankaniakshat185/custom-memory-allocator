@@ -1,6 +1,6 @@
 # ADR-002: Baseline allocator — header layout and explicit free list
 
-- Status: Accepted. Superseded in part by ADR-005 (bump pointer removed). Timing numbers pending Phase 5.
+- Status: Accepted. Superseded in part by ADR-005 (bump pointer removed). Footprint and timing measured.
 - Date: 2026-10-24
 - Environment: see [../environment.md](../environment.md)
 - Comparison baseline: macOS libmalloc (not glibc)
@@ -30,7 +30,7 @@ ADR-001 chose an intrusive explicit free list. This ADR fixes the concrete block
 - Known weaknesses, deliberately left for later ADRs: internal waste (a 16 B request can consume a large freed block), and external fragmentation (no coalescing). The stress tests do not assert on these.
 - Use-after-free writes clobber a freed block's `next`/`prev`; this can corrupt the free list. Documented limitation; neighbouring live blocks are unaffected (tested).
 - Single-threaded; `default_heap()` lazy initialisation is not thread-safe.
-- **Measured impact (footprint probe, [results](../results/footprint-phase1-baseline.csv)):** internal overhead 3.83× (random sizes), 7.00× (app-like, with 1,035 OOM failures in a 32 MiB arena for 4.7 MB requested), 1.69× (phase shift). Analysis in ADR-005. Timing: Phase 5 will benchmark this commit (`9baf140`, phase-1-baseline) against libmalloc so ADR-005/006 have a true before/after.
+- **Measured impact (footprint probe, [results](../results/footprint-phase1-baseline.csv)):** internal overhead 3.83× (random sizes), 7.00× (app-like, with 1,035 OOM failures in a 32 MiB arena for 4.7 MB requested), 1.69× (phase shift). Analysis in ADR-005. **Timing (ADR-008, `run_phases.sh`):** 15.36 ns/op on random sizes (cheapest median of all phases: no split, no merge, bump-pointer fresh memory) but batch p99 96 ns; app-like not comparable (436 OOM failures/rep even in 256 MiB); 2,008.7 ns/op on `adversarial_holes`. The cheap median is paid for with 3.8–7× internal overhead and OOM failures.
 
 ## Validation
 - 31 tests pass under UBSan (unit, alignment, randomised stress with `check()` after every op, API integration). Strategy: [ADR-004](004-verification-strategy.md).

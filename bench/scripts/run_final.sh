@@ -9,6 +9,9 @@ cd "$(dirname "$0")/../.."
 reps=${1:-15}
 out=docs/results
 state="$out/timing-machine-state.txt"
+# The state block runs without pipefail: `ps | head` makes ps exit on SIGPIPE,
+# which pipefail + set -e would turn into a silent exit.
+set +o pipefail
 {
     echo "run started $(date '+%Y-%m-%d %H:%M:%S')"
     uptime
@@ -18,9 +21,11 @@ state="$out/timing-machine-state.txt"
     echo "top processes:"
     ps -Ao pcpu,comm -r | head -6 | cut -c1-100
 } > "$state"
-echo "== current tree" >&2
+set -o pipefail
+echo "Machine state recorded in $state" >&2
+echo "== current tree (about 2 min)" >&2
 bench/scripts/run_all.sh "$out" "$reps"
-echo "== phase commits" >&2
+echo "== phase commits (about 10 min; phase2 is the slow one)" >&2
 bench/scripts/run_phases.sh "$out" "$reps"
 {
     echo "run finished $(date '+%Y-%m-%d %H:%M:%S')"

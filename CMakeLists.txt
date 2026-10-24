@@ -1,4 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
+
+# On Apple Silicon, build native arm64 even if CMake itself is an x86_64 binary
+# running under Rosetta (it then reports an x86_64 host and would build x86_64,
+# which silently benchmarks under translation; see docs/environment.md).
+# hw.optional.arm64 is 1 on Apple Silicon even when queried under Rosetta.
+if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
+  execute_process(COMMAND sysctl -n hw.optional.arm64
+                  OUTPUT_VARIABLE _apple_silicon OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  if(_apple_silicon STREQUAL "1")
+    set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Target architecture" FORCE)
+  endif()
+endif()
+
 project(custom_memory_allocator LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)

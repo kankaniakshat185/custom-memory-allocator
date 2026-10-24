@@ -1,6 +1,6 @@
 # ADR-005: Splitting oversized free blocks
 
-- Status: Accepted
+- Status: Accepted (timing: Phase 2 untimeable, see below)
 - Date: 2026-10-24
 - Environment: see [../environment.md](../environment.md)
 - Before: commit `9baf140` (phase-1-baseline). Raw data: [footprint-phase1-baseline.csv](../results/footprint-phase1-baseline.csv)
@@ -27,7 +27,7 @@ On app-like, the heap ran out of a 32 MiB arena while only 4.7 MB was requested.
 The epilogue also prepares Phase 3: a forward-coalescing walk stops at it, because it reads as allocated.
 
 ## Alternatives considered
-1. **Allocate from the back of the free block.** The free block keeps its header address and list position; only its size shrinks, which avoids an unlink/push pair per split and is likely slightly faster. Rejected for now: front allocation makes consecutive allocations ascending in address (better spatial locality, and a meaningful `high_water` footprint metric). **Open question for the Phase 5 timing benchmarks.** If list manipulation shows up in profiles, this is the first thing to try.
+1. **Allocate from the back of the free block.** The free block keeps its header address and list position; only its size shrinks, which avoids an unlink/push pair per split and is likely slightly faster. Rejected for now: front allocation makes consecutive allocations ascending in address (better spatial locality, and a meaningful `high_water` footprint metric). **Still open:** the Phase 5 harness did not build a back-allocation variant, so it gives no answer here. The profiler (ADR-010) will show whether list manipulation in `place()` is significant; only then is building the variant worth it.
 2. **Larger split threshold (e.g. only split if the remainder ≥ 64 or 128 B).** Avoids creating small slivers that only tiny requests can use. Rejected for this phase: slivers are a fragmentation problem, and the fix for fragmentation is coalescing (ADR-006), which re-absorbs them. Changing two variables at once would make the next ADR's numbers unattributable. Revisit with data after ADR-006.
 3. **Keep the bump pointer and split only reused blocks.** Two sources of memory and two code paths, with no benefit once splitting exists. Rejected.
 4. **Remainder keeps the original block's list position (replace in place) instead of pushing at head.** Preserves list order. Rejected: the LIFO policy (ADR-001) already defines order by recency, and a freshly split remainder is the most recently touched block.
@@ -53,8 +53,11 @@ The epilogue also prepares Phase 3: a forward-coalescing walk stops at it, becau
 
 This is the expected textbook result, and it is why splitting and coalescing are always used together. It is recorded here separately so ADR-006 has a clean before/after. **Resolved by [ADR-006](006-coalescing.md):** OOM back to 0 on all workloads.
 
+### Timing (ADR-008)
+**Phase 2 could not be timed.** The phase run was killed after 80 minutes, still inside the first rep of the first workload (`random_16B_64KiB`, 1 M ops). Every split adds a free block that can never merge again, and first-fit walks the whole list on each allocation, so run time grows roughly quadratically. That is the time-domain version of the 107,655-piece free list above: splitting without coalescing is not just wasteful, it is unusable at this scale. (Phase 1 vs. Phase 3 timing is in ADR-006.)
+
 ### Other consequences
-- Allocation now always unlinks a block and may push a remainder: one more list operation per split allocation. Timing impact is unmeasured until Phase 5. Rerun the timing benchmarks on this commit then.
+- Allocation now always unlinks a block and may push a remainder: one more list operation per split allocation. Its cost can only be seen together with coalescing (Phase 3; see ADR-006), since Phase 2 is untimeable.
 - First-fit with LIFO now walks past many small slivers before finding a large block, so search cost will rise with fragmentation. To quantify in Phase 5/7.
 - Side-effect visible in the test suite: `Stress.SmallSizes` went from 1.6 s to 13.7 s (Debug + UBSan). The workload didn't change; `check()` runs after every operation and is O(blocks), and the block count now only grows. The stress workloads are deliberately left unchanged, so ADR-006 can confirm that coalescing brings this back down.
 - The epilogue makes `free` reject a pointer whose header would sit at or after the epilogue. Interior pointers into free memory still can't be detected (ADR-004).

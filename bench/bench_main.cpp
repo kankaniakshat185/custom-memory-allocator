@@ -9,6 +9,8 @@
 // Usage: bench_timing [--label L] [--reps N] [--alloc a,b] [--workload w,x] [--raw FILE]
 //   allocators: system, heap, heap_naive_realloc, heap_growonly_realloc
 //   MallocNanoZone=0 in the environment relabels "system" as "system_nano_off".
+#include <sys/sysctl.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -208,9 +210,24 @@ std::vector<RunResult> run_system(const Trace& t, int reps) {
     return runs;
 }
 
+// True if this process is being translated by Rosetta 2. Timing an x86_64
+// binary on Apple Silicon measures the translator, not the allocator.
+bool under_rosetta() {
+    int translated = 0;
+    std::size_t len = sizeof(translated);
+    if (sysctlbyname("sysctl.proc_translated", &translated, &len, nullptr, 0) != 0) return false;
+    return translated == 1;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
+    if (under_rosetta() && !std::getenv("BENCH_ALLOW_ROSETTA")) {
+        std::fprintf(stderr,
+                     "bench_timing: running under Rosetta (x86_64 binary on Apple Silicon); "
+                     "rebuild for arm64. Set BENCH_ALLOW_ROSETTA=1 to override.\n");
+        return 3;
+    }
     Options o;
     for (int i = 1; i + 1 < argc; i += 2) {
         const std::string k = argv[i];

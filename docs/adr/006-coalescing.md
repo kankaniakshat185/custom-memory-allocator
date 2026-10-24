@@ -1,6 +1,6 @@
 # ADR-006: Coalescing with boundary tags and a prev-allocated bit
 
-- Status: Accepted
+- Status: Accepted (footprint and timing measured)
 - Date: 2026-10-24
 - Environment: see [../environment.md](../environment.md)
 - Before: commit `4c8d98e` (phase-2-splitting). Raw data: [footprint-phase2-splitting.csv](../results/footprint-phase2-splitting.csv)
@@ -61,8 +61,20 @@ Internal overhead stays at ADR-005's level (1.003–1.021×). Coalescing doesn't
 - **App-like is the weak spot: 0.310 utilisation.** The heap reached 15.4 MB of high-water for 4.8 MB of peak live data. Hypothesis for ADR-009, not yet tested: with LIFO first-fit, small requests are carved out of whatever free block is at the list head, often a large hole left by a freed large object. That breaks the hole up, so the next large request has to go to the untouched tail. Best-fit (ADR-009) should send small requests to small holes, and that comparison is the test.
 - **Test suite** (Debug + UBSan): `Stress.SmallSizes` 1.6 s (P1) → 13.7 s (P2) → **3.9 s** (P3). Full suite 4.0 s / 31 tests → 20.5 s / 40 tests → **8.5 s / 51 tests**. The per-operation checker's cost tracks the block count, which is a direct, if informal, fragmentation measure. It is not back to Phase 1's time, which is expected: Phase 1's walk never covered the uncarved tail, and the suite has more tests.
 
+### Timing (ADR-008; one `run_phases.sh` run, `-O3`, median ns/op)
+| Workload | Phase 1 (no split, no coalesce) | Phase 2 (split only) | **Phase 3 (split + coalesce)** |
+|---|---|---|---|
+| random 16 B–64 KiB | 15.36 (batch p99 96.2) | untimeable (> 80 min) | **17.58** (batch p99 49.1) |
+| app-like | 26.45, 436 OOM/rep, not comparable | untimeable | **18.07** |
+| adversarial holes | 2,008.7 | untimeable | **709.2** |
+
+- **Coalescing is what makes the split design usable in time, not just in memory.** Phase 2 (split, no coalesce) cannot finish a 1 M-op workload. Phase 3 does it at ~18 ns/op.
+- **Against Phase 1, the median costs ~2 ns/op (+14%) on random sizes, but the tail halves.** Phase 1 does less work per call: no split, no merge, and fresh memory from a bump pointer. But its batch p99 is 96 vs. 49 ns. Phase 1 also pays 3.8× internal overhead for that median (ADR-005), and fails 436 times per rep on app-like.
+- **Adversarial: Phase 3 is 2.8× faster than Phase 1.** Hypothesis, not verified: Phase 1 never splits, so a 24 B pin request takes a whole 1–2 KiB hole, and it never coalesces, so freed pins and holes stay as separate list nodes from round to round, and the walks get longer. Checking it would mean logging free-list length per round under Phase 1 (`stats().free_blocks` exists there), deferred to the profiling phase (ADR-010).
+- Phase 3 is still 53× slower than libmalloc on this workload (ADR-008). Coalescing does nothing for search cost when the holes are pinned apart. That is ADR-009/011's problem.
+
 ### Other consequences
-- `free` is still O(1): at most two `list_remove`s, one footer read and three header writes. Its timing cost relative to Phase 2 is unmeasured until Phase 5; measure free-heavy workloads specifically.
+- `free` is still O(1): at most two `list_remove`s, one footer read and three header writes. Its cost is included in the Phase 3 numbers above; isolating free vs. malloc cost needs the profiler (ADR-010).
 - A use-after-free write into a *freed* block can now corrupt more state: the merged block's size or links span what used to be several blocks. Still out of scope (ADR-004). The checker would report it at the next operation in tests.
 - Double-free of an absorbed block is detected only until that memory is reused. After reuse the stale header is overwritten by live data. Inherent without separate metadata; documented.
 - Every allocation now writes a header just past the allocated block: the successor's (prev-allocated bit) or the split remainder's. For large blocks that is a different cache line (128 B on M2) from the block's own header. To be checked in the Phase 7 profile.
