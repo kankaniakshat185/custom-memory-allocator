@@ -12,14 +12,20 @@ struct HeapStats {
     std::size_t bytes_in_use = 0;   // sum of allocated block sizes (incl. headers)
     std::size_t peak_in_use = 0;
     std::size_t live_blocks = 0;
-    std::size_t high_water = 0;     // bytes of arena ever carved
+    std::size_t high_water = 0;     // highest arena offset ever handed out (footprint proxy)
     std::size_t free_blocks = 0;
 };
 
-// Phase 1 baseline (ADR-002): explicit doubly-linked free list, LIFO insert,
-// first-fit, no splitting, no coalescing. Fresh memory is bump-carved from the
-// uncarved tail of the arena when no free block fits.
-// Single-threaded.
+struct FreeSummary {
+    std::size_t count = 0;
+    std::size_t bytes = 0;
+    std::size_t largest = 0;
+};
+
+// Explicit doubly-linked free list, LIFO insert, first-fit (ADR-002).
+// The arena starts as one free block followed by a zero-size allocated
+// epilogue header; oversized free blocks are split on allocation (ADR-005).
+// No coalescing yet. Single-threaded.
 class Heap {
 public:
     bool init(std::size_t arena_bytes);
@@ -31,6 +37,9 @@ public:
     // holds; otherwise false and, if `why` is non-null, a static description.
     bool check(const char** why = nullptr) const;
 
+    // Walks the free list (O(free blocks)); for tests and footprint probes.
+    FreeSummary free_summary() const;
+
     const HeapStats& stats() const { return stats_; }
     const Arena& arena() const { return arena_; }
 
@@ -40,9 +49,8 @@ private:
     void list_remove(Header* h);
 
     Arena arena_;
-    std::uint8_t* first_ = nullptr;  // first block header (base + 8)
-    std::uint8_t* top_ = nullptr;    // next uncarved header address
-    std::uint8_t* end_ = nullptr;    // arena end
+    std::uint8_t* first_ = nullptr;     // first block header (base + 8)
+    std::uint8_t* epilogue_ = nullptr;  // zero-size allocated header at arena end - 8
     Header* free_head_ = nullptr;
     HeapStats stats_;
 };

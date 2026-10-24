@@ -6,17 +6,19 @@
 | [testing.md](testing.md) | Test strategy and how to run |
 | [environment.md](environment.md) | Machine/toolchain details and known tooling issues |
 | [adr/](adr/) | Architecture decision records (template: [000-template.md](adr/000-template.md)) |
-| [results/](results/) | Raw benchmark CSVs, profiler traces/screenshots, `vmmap` output |
+| [results/](results/) | Raw benchmark and footprint-probe CSVs, profiler traces/screenshots, `vmmap` output |
 
 ## ADR index
 
 | ADR | Title | Status |
 |---|---|---|
-| [001](adr/001-block-tracking-structure.md) | Block tracking structure | Proposed |
-| [002](adr/002-baseline-header-layout-and-free-list.md) | Baseline allocator: header layout, explicit free list | Accepted (numbers pending) |
-| 003 | Splitting | Planned |
-| 004 | Coalescing | Planned |
-| 005 | Realloc strategy | Planned |
-| 006 | First-fit vs. best-fit | Planned |
-| 007 | Profiler findings | Planned |
-| 008 | Segregated lists | Conditional on profiling |
+| [001](adr/001-block-tracking-structure.md) | Block tracking structure | Accepted |
+| [002](adr/002-baseline-header-layout-and-free-list.md) | Baseline allocator: header layout, explicit free list | Accepted (timing pending) |
+| [003](adr/003-arena-fixed-mmap-reservation.md) | Arena: one fixed mmap reservation | Accepted |
+| [004](adr/004-verification-strategy.md) | Verification strategy: invariant checker, tests, footprint probe | Accepted |
+| [005](adr/005-splitting.md) | Splitting | Accepted (timing pending) |
+| 006 | Coalescing | Planned |
+| 007 | Realloc strategy | Planned |
+| 008 | First-fit vs. best-fit | Planned |
+| 009 | Profiler findings | Planned |
+| 010 | Segregated lists | Conditional on profiling |

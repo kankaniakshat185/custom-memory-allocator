@@ -48,14 +48,14 @@ Slack is real slack. Do not spend it on Tier 2 before §7 is met.
 
 | # | Phase | Budget | Output | ADR |
 |---|---|---|---|---|
-| 0 | Scaffolding + toolchain verification | 0.5–1 d | CMake, GoogleTest (FetchContent), arena wrapper, `heap_check()` skeleton, Xcode/Instruments check, ASan diagnosis (timeboxed) | – |
-| 1 | Baseline allocator: arena, headers, alignment, explicit free list, first-fit, no split/coalesce | 1.5 d | `my_malloc`/`my_free`, basic tests | ADR-001, ADR-002 |
-| 2 | Splitting | 0.5 d | Remainder to free list, min-split threshold | ADR-003 |
-| 3 | Coalescing (boundary tags, both directions) | 1.5 d | Coalescing tests, `heap_check()` invariants in every test | ADR-004 |
-| 4 | Realloc, calloc, double-free, OOM | 1 d | Full Tier 1 test suite | ADR-005 |
+| 0 | Scaffolding + toolchain verification | 0.5–1 d | CMake, GoogleTest (FetchContent), arena wrapper, `heap_check()` skeleton, Xcode/Instruments check, ASan diagnosis (timeboxed) | ADR-003 (arena) |
+| 1 | Baseline allocator: arena, headers, alignment, explicit free list, first-fit, no split/coalesce | 1.5 d | `my_malloc`/`my_free`, basic tests | ADR-001, ADR-002, ADR-004 (verification) |
+| 2 | Splitting | 0.5 d | Remainder to free list, min-split threshold | ADR-005 |
+| 3 | Coalescing (boundary tags, both directions) | 1.5 d | Coalescing tests, `heap_check()` invariants in every test | ADR-006 |
+| 4 | Realloc, calloc, double-free, OOM | 1 d | Full Tier 1 test suite | ADR-007 |
 | 5 | Benchmark harness: 3 workloads × {libmalloc, first-fit, best-fit} | 1.5 d | `bench/` binary, CSV output, plot script | – |
-| 6 | Best-fit variant + comparison (compile-time policy template) | 1 d | Variant selectable with no runtime branch | ADR-006 |
-| 7 | Profiling and analysis (Instruments) | 1.5 d | Profiler-backed "why" sections; segregated lists only if justified | ADR-007 (+ ADR-008 conditional) |
+| 6 | Best-fit variant + comparison (compile-time policy template) | 1 d | Variant selectable with no runtime branch | ADR-008 |
+| 7 | Profiling and analysis (Instruments) | 1.5 d | Profiler-backed "why" sections; segregated lists only if justified | ADR-009 (+ ADR-010 conditional) |
 | 8 | README, results table, ADR consistency pass | 1 d | Tag `v1.0` | – |
 
 ## 4. Benchmark methodology
@@ -87,7 +87,7 @@ Also document in every ADR that libmalloc is a multi-zone, size-class allocator 
 | Microarchitectural "why" | Instruments **CPU Counters** (bottleneck breakdown) | Apple Silicon only; check availability on this OS/Xcode in Phase 0. |
 | libmalloc footprint | Instruments **Allocations**, `vmmap`, `heap`, `leaks` CLI tools | Cannot observe `my_malloc` (see §4). |
 | Own-allocator footprint | Allocator debug stats + `task_info` | Built in Phase 4/5. |
-| Fallback if Instruments unavailable | `sample <pid>` / `spindump` for stacks; wall-clock harness + counters for the rest | Weaker for the "why"; call it out in ADR-007 if used. |
+| Fallback if Instruments unavailable | `sample <pid>` / `spindump` for stacks; wall-clock harness + counters for the rest | Weaker for the "why"; call it out in ADR-009 if used. |
 | Correctness | GoogleTest + **`heap_check()` after every op in stress tests** | Primary correctness tool, independent of sanitizers. |
 | Sanitizers | ASan/UBSan **if the Phase 0 hang is resolved** | Even when working, ASan cannot see overflows *inside* the mmap'd arena (it doesn't know the arena's block structure), so it covers test code and the allocator's own stack/globals, not heap corruption within the arena. `heap_check()` and guard patterns cover that. If ASan stays broken, use UBSan alone, `MallocScribble`-style fill patterns in debug builds, and Apple Guard Malloc on the *test code* where useful. |
 
@@ -137,64 +137,14 @@ C++17, GoogleTest, custom wall-clock harness. Builds: test config (`-O0 -g`, san
 
 1. All tests pass; `heap_check()` passes after every operation in the stress tests; sanitizer status (clean, or documented as unavailable) recorded.
 2. Three workloads × three allocators (libmalloc, first-fit, best-fit) have repeatable numbers, with the run-to-run spread reported.
-3. ADR-001 through ADR-006 complete with measured before/after numbers.
+3. ADR-001 through ADR-008 complete with measured before/after numbers.
 4. README results table filled in; at least one profiler-backed explanation of a result (or the documented fallback if Instruments was unavailable).
 
 Tier 2 order if time remains: debug stats (0.5 d) → `operator new` + `std::vector` demo (0.5–1 d) → slab fast path (2 d) → thread safety last. Note: arm64 has a weaker memory model than x86; relevant only once threads arrive.
 
-## 8. ADR-001 skeleton: Block tracking structure
+## 8. ADRs
 
-```markdown
-# ADR-001: Block tracking structure — free list vs. alternatives
-
-- Status: Proposed
-- Date: <date>
-- Environment: Apple M2 (arm64), macOS 26.5.2, Apple clang 17.0.0, 16 KiB pages,
-  <flags>. See docs/environment.md.
-- Comparison baseline: macOS libmalloc (not glibc).
-
-## Context
-The allocator manages one fixed mmap'd arena and must (a) find a free block for
-a request, (b) mark blocks free/allocated, (c) merge adjacent free blocks, with
-no bookkeeping memory outside the arena. Requirements: 16-byte alignment, O(1)
-free including coalescing, minimal per-block overhead. Header layout,
-coalescing and fit policy all depend on this decision.
-
-## Decision
-Intrusive, explicit, doubly-linked free list, LIFO insertion, next/prev stored
-in the payload of free blocks. 8 B header (size | alloc bit | prev-alloc bit),
-footer on free blocks only, 32 B minimum block. Layout details in ADR-002.
-
-## Alternatives considered
-1. Implicit free list (walk all blocks): simplest, but allocation is O(all
-   blocks). Rejected as final design; kept as a measured Phase 1 reference
-   point if cheap. [Result: TBD]
-2. Bitmap over fixed-size granules: O(1) state lookup, but needs a side
-   structure (violates "no separate bookkeeping"), finding N free granules is a
-   scan, and granule size trades internal fragmentation against bitmap size.
-3. Singly-linked free list: smaller min block, but unlinking during coalescing
-   is O(n). Rejected: coalescing is the key feature.
-4. Address-ordered free list: lower fragmentation, but O(n) insert on free.
-   Deferred as a follow-up ADR candidate.
-5. Segregated size-class lists: likely answer to O(n) search; out of Tier 1
-   scope unless profiling motivates it (ADR-008).
-6. Buddy system / balanced tree: rejected; power-of-two internal fragmentation
-   (buddy) or complexity (tree) with no Tier 1 benefit.
-
-## Consequences
-- Pros: O(1) free + coalesce; no external metadata; fit policy isolated in find_fit().
-- Cons: 32 B minimum block (quantify waste for tiny requests); O(free blocks)
-  search; LIFO order may fragment more than address order.
-- Measured impact: <ns/op and footprint ratio vs. implicit-list reference and
-  libmalloc per workload, with Instruments-backed explanation>
-- Limitation: baseline is libmalloc; <Nano-zone control result or "no control
-  possible">.
-- Follow-ups: ADR-002 header layout, ADR-004 coalescing, ADR-006 fit policy.
-
-## Validation
-- Hypothesis: <e.g. explicit list cuts alloc latency by ≥Nx vs. implicit list on workload (b)>
-- Result: <supported / refuted, with numbers>
-```
+All ADRs live in [adr/](adr/); the index with statuses is in [README.md](README.md). The ADR-001 skeleton that was drafted here is now [adr/001-block-tracking-structure.md](adr/001-block-tracking-structure.md).
 
 ## 9. Decisions still open
 

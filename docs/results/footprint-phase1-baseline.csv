@@ -1,0 +1,4 @@
+workload,ops,oom,peak_requested,peak_in_use,high_water,internal_overhead,utilisation
+random_16B_4KiB,200000,0,1861741,7133648,7704744,3.832,0.242
+app_like,200000,1035,4771855,33402288,33554248,7.000,0.142
+phase_shift,220000,0,2279902,3846704,3870024,1.687,0.589

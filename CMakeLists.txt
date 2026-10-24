@@ -44,6 +44,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(myalloc_tests
   tests/test_arena.cpp
   tests/test_heap_unit.cpp
+  tests/test_split.cpp
   tests/test_alignment.cpp
   tests/test_stress.cpp
   tests/test_api_integration.cpp)
@@ -51,3 +52,7 @@ target_link_libraries(myalloc_tests PRIVATE myalloc GTest::gtest_main)
 target_include_directories(myalloc_tests PRIVATE src)
 include(GoogleTest)
 gtest_discover_tests(myalloc_tests)
+
+add_executable(footprint_probe bench/footprint_probe.cpp)
+target_link_libraries(footprint_probe PRIVATE myalloc)
+target_include_directories(footprint_probe PRIVATE src)

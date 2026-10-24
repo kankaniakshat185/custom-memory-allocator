@@ -1,6 +1,6 @@
 # ADR-002: Baseline allocator — header layout and explicit free list
 
-- Status: Accepted (implementation complete; benchmark numbers pending Phase 5)
+- Status: Accepted. Superseded in part by ADR-005 (bump pointer removed). Timing numbers pending Phase 5.
 - Date: 2026-10-24
 - Environment: see [../environment.md](../environment.md)
 - Comparison baseline: macOS libmalloc (not glibc)
@@ -21,16 +21,16 @@ ADR-001 chose an intrusive explicit free list. This ADR fixes the concrete block
 - **Correctness tooling:** `Heap::check()` walks every block and the free list (sizes, alignment, footer == header, list/walk agreement, counters). Tests call it after every operation in the stress tests.
 
 ## Alternatives considered
-- **Footer on every block:** simpler backward coalescing but +8 B per allocation. Deferred to ADR-004 where the prev-alloc-bit alternative is justified with numbers.
+- **Footer on every block:** simpler backward coalescing but +8 B per allocation. Deferred to ADR-006 (coalescing), where the prev-alloc-bit alternative is justified.
 - **Separate `Heap::free` abort vs. status:** returning a status keeps the core testable without death tests; only the C wrapper aborts. Rejected: aborting inside `Heap`.
-- **Starting the arena as one big free block now:** requires splitting, which is the subject of ADR-003. Rejected for Phase 1 to keep each ADR's before/after attributable to one change.
+- **Starting the arena as one big free block now:** requires splitting, which is the subject of ADR-005. Rejected for Phase 1 to keep each ADR's before/after attributable to one change.
 - **`malloc(0)` returns NULL:** legal, but then `free(NULL)` and a failed allocation are indistinguishable to callers. Rejected.
 
 ## Consequences
 - Known weaknesses, deliberately left for later ADRs: internal waste (a 16 B request can consume a large freed block), and external fragmentation (no coalescing). The stress tests do not assert on these.
 - Use-after-free writes clobber a freed block's `next`/`prev`; this can corrupt the free list. Documented limitation; neighbouring live blocks are unaffected (tested).
 - Single-threaded; `default_heap()` lazy initialisation is not thread-safe.
-- **Measured impact:** TBD. Phase 5 will benchmark this commit (tag `phase-1-baseline`) against libmalloc so ADR-003/004 have a true before/after.
+- **Measured impact (footprint probe, [results](../results/footprint-phase1-baseline.csv)):** internal overhead 3.83× (random sizes), 7.00× (app-like, with 1,035 OOM failures in a 32 MiB arena for 4.7 MB requested), 1.69× (phase shift). Analysis in ADR-005. Timing: Phase 5 will benchmark this commit (`9baf140`, phase-1-baseline) against libmalloc so ADR-005/006 have a true before/after.
 
 ## Validation
-- 31 tests pass under UBSan (unit, alignment, randomised stress with `check()` after every op, API integration). See [../testing.md](../testing.md).
+- 31 tests pass under UBSan (unit, alignment, randomised stress with `check()` after every op, API integration). Strategy: [ADR-004](004-verification-strategy.md).

@@ -86,15 +86,6 @@ TEST_F(HeapUnit, FirstFitSkipsTooSmallBlocks) {
     EXPECT_HEAP_OK(h);
 }
 
-TEST_F(HeapUnit, NoSplittingYetWholeBlockIsHandedOut) {
-    // Baseline behaviour documented in ADR-002; Phase 2 (ADR-003) changes this.
-    void* big = h.malloc(1000);
-    h.free(big);
-    void* p = h.malloc(16);
-    EXPECT_EQ(p, big);
-    EXPECT_EQ(h.stats().bytes_in_use, myalloc::block_size_for(1000));
-}
-
 TEST_F(HeapUnit, OutOfMemoryReturnsNullAndHeapSurvives) {
     std::vector<void*> ptrs;
     while (void* p = h.malloc(4096)) ptrs.push_back(p);
@@ -127,8 +118,8 @@ TEST_F(HeapUnit, InvalidPointersAreRejected) {
     void* p = h.malloc(64);
     ASSERT_NE(p, nullptr);
     EXPECT_EQ(h.free(static_cast<char*>(p) + 8), FreeStatus::InvalidPointer);  // misaligned
-    void* beyond = static_cast<char*>(h.arena().base()) + h.arena().size() - 64;
-    EXPECT_EQ(h.free(beyond), FreeStatus::InvalidPointer);  // never carved
+    void* past_end = static_cast<char*>(h.arena().base()) + h.arena().size();
+    EXPECT_EQ(h.free(past_end), FreeStatus::InvalidPointer);  // outside the arena
     EXPECT_HEAP_OK(h);
 }
 
@@ -153,5 +144,5 @@ TEST_F(HeapUnit, StatsTrackUsage) {
     EXPECT_EQ(h.stats().live_blocks, 0u);
     EXPECT_EQ(h.stats().bytes_in_use, 0u);
     EXPECT_EQ(h.stats().peak_in_use, both);
-    EXPECT_EQ(h.stats().free_blocks, 2u);
+    EXPECT_EQ(h.stats().free_blocks, 3u);  // a, b, and the never-allocated remainder
 }
