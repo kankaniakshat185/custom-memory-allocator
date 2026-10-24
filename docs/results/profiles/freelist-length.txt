@@ -1,0 +1,27 @@
+== adversarial_holes
+  phase1       mallocs=210000 mean=3039.4 p50=2898 p99=6138 max=6258
+mean by tenth of trace: 2107 3050 3089 3122 3144 3156 3171 3182 3187 3187
+  phase3       mallocs=210000 mean=358.2 p50=1 p99=2932 max=3001
+mean by tenth of trace: 358 358 358 358 358 358 358 358 358 358
+  current      mallocs=210000 mean=358.2 p50=1 p99=2932 max=3001
+mean by tenth of trace: 358 358 358 358 358 358 358 358 358 358 | nodes visited per malloc: 286.7
+  current-bf   mallocs=210000 mean=358.2 p50=1 p99=2932 max=3001
+mean by tenth of trace: 358 358 358 358 358 358 358 358 358 358 | nodes visited per malloc: 286.7
+== app_like
+  phase1       mallocs=503479 mean=2179.6 p50=2216 p99=2671 max=2782
+mean by tenth of trace: 1646 2157 2162 2291 2317 2546 2376 2188 2183 1930
+  phase3       mallocs=503479 mean=1609.8 p50=1629 p99=1986 max=2034
+mean by tenth of trace: 1148 1399 1607 1617 1639 1556 1656 1777 1786 1914
+  current      mallocs=503479 mean=1609.8 p50=1629 p99=1986 max=2034
+mean by tenth of trace: 1148 1399 1607 1617 1639 1556 1656 1777 1786 1914 | nodes visited per malloc: 2.0
+  current-bf   mallocs=503479 mean=207.1 p50=208 p99=281 max=323
+mean by tenth of trace: 170 179 208 215 212 197 212 222 215 242 | nodes visited per malloc: 57.2
+== random_16B_64KiB
+  phase1       mallocs=501845 mean=2166.4 p50=2265 p99=2728 max=2823
+mean by tenth of trace: 1200 1870 2275 2212 2258 2320 2563 2231 2251 2485
+  phase3       mallocs=501845 mean=854.7 p50=839 p99=1102 max=1155
+mean by tenth of trace: 985 980 814 851 853 829 710 873 886 767
+  current      mallocs=501845 mean=854.7 p50=839 p99=1102 max=1155
+mean by tenth of trace: 985 980 814 851 853 829 710 873 886 767 | nodes visited per malloc: 1.8
+  current-bf   mallocs=501845 mean=353.6 p50=352 p99=456 max=499
+mean by tenth of trace: 391 402 345 354 351 344 306 355 362 326 | nodes visited per malloc: 219.3

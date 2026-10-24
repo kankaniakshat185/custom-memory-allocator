@@ -6,7 +6,7 @@
 | [testing.md](testing.md) | Test strategy and how to run |
 | [environment.md](environment.md) | Machine/toolchain details and known tooling issues |
 | [adr/](adr/) | Architecture decision records (template: [000-template.md](adr/000-template.md)) |
-| [results/](results/) | Footprint-probe CSVs, timing CSVs + [timing-summary.md](results/timing-summary.md), machine state per run, later: profiler traces |
+| [results/](results/) | Footprint-probe CSVs, timing CSVs + summaries, machine state per run, [profiles/](results/profiles/) (attributed Time Profiler + CPU Counters results) |
 
 ## ADR index
 
@@ -21,6 +21,6 @@
 | [007](adr/007-realloc-and-calloc.md) | realloc (in place where possible) and calloc | Accepted (resolved by 009) |
 | [008](adr/008-benchmark-methodology.md) | Benchmark methodology: trace replay, batch timing, controlled libmalloc baseline | Accepted (native arm64 results) |
 | [009](adr/009-first-fit-vs-best-fit.md) | Fit policy: first-fit vs. best-fit, compile-time | Accepted (first-fit default) |
-| 010 | Profiler findings | Planned |
-| 011 | Segregated size-class free lists | Motivated by 009's measurements; scope decision pending (stretch) |
+| [010](adr/010-profiling-findings.md) | Profiling findings: where the time goes and why (Time Profiler + CPU Counters) | Accepted |
+| 011 | Segregated size-class free lists | Motivated by 009 + 010 (memory and worst case, not average speed); scope decision pending (stretch) |
 | [012](adr/012-use-after-free-hardening.md) | Use-after-free hardening: validated links, safe unlinking, fail-stop | Accepted |

@@ -28,4 +28,4 @@ Intrusive, explicit, doubly-linked free list, LIFO insertion, next/prev stored i
 
 ## Validation
 - Hypothesis: allocation cost is dominated by free-list search length, which grows with fragmentation; O(1) free and coalesce keep `free` flat across workloads.
-- Result: **partly supported** (ADR-008). The adversarial workload's bimodal batches (median 6.7 ns, p99 8.2 µs) are what a long `find_fit` walk looks like, and on typical mixes the median is low. Confirming that `find_fit` dominates, rather than inferring it, needs a Time Profiler breakdown (ADR-010).
+- Result (measured in [ADR-010](010-profiling-findings.md)): **refuted for first-fit on typical workloads.** Search is 9–10% of the time, and LIFO first-fit visits only ~2 of 855–1,610 free blocks per malloc. **Supported for best-fit and fragmented heaps:** 92.5% (best-fit random) to 97.7% (adversarial) of the time is search, memory-latency bound. On typical workloads the free path (merge + unlinking, ~51%) and branch mis-speculation dominate instead.

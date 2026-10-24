@@ -89,3 +89,7 @@ target_include_directories(footprint_probe PRIVATE src)
 add_executable(bench_timing bench/bench_main.cpp bench/workloads.cpp)
 target_link_libraries(bench_timing PRIVATE myalloc)
 target_include_directories(bench_timing PRIVATE src)
+
+add_executable(freelist_length bench/freelist_length.cpp bench/workloads.cpp)
+target_link_libraries(freelist_length PRIVATE myalloc)
+target_include_directories(freelist_length PRIVATE src)
