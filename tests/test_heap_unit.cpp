@@ -65,9 +65,12 @@ TEST_F(HeapUnit, AllocationsDoNotOverlap) {
 }
 
 TEST_F(HeapUnit, FreedBlockIsReusedLifo) {
+    // Guards keep a and b from coalescing with each other or the tail.
     void* a = h.malloc(64);
+    void* g1 = h.malloc(16);
     void* b = h.malloc(64);
-    ASSERT_TRUE(a && b);
+    void* g2 = h.malloc(16);
+    ASSERT_TRUE(a && b && g1 && g2);
     h.free(a);
     h.free(b);
     EXPECT_EQ(h.malloc(64), b);  // most recently freed first
@@ -77,8 +80,10 @@ TEST_F(HeapUnit, FreedBlockIsReusedLifo) {
 
 TEST_F(HeapUnit, FirstFitSkipsTooSmallBlocks) {
     void* small = h.malloc(16);
+    void* g1 = h.malloc(16);
     void* big = h.malloc(200);
-    ASSERT_TRUE(small && big);
+    void* g2 = h.malloc(16);
+    ASSERT_TRUE(small && big && g1 && g2);
     h.free(big);
     h.free(small);  // list head: small, then big
     void* p = h.malloc(150);  // small can't serve it; big can
@@ -144,5 +149,5 @@ TEST_F(HeapUnit, StatsTrackUsage) {
     EXPECT_EQ(h.stats().live_blocks, 0u);
     EXPECT_EQ(h.stats().bytes_in_use, 0u);
     EXPECT_EQ(h.stats().peak_in_use, both);
-    EXPECT_EQ(h.stats().free_blocks, 3u);  // a, b, and the never-allocated remainder
+    EXPECT_EQ(h.stats().free_blocks, 1u);  // a, b and the tail coalesce back into one block
 }

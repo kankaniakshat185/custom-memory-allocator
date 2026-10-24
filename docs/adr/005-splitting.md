@@ -51,7 +51,7 @@ The epilogue also prepares Phase 3: a forward-coalescing walk stops at it, becau
 - **Why Phase 1 didn't have this problem:** reusing whole blocks never created new boundaries, and the bump pointer always had a large contiguous tail. Phase 1 wasted memory *inside* blocks. Phase 2 wastes it *between* blocks.
 - `high_water` now reaches the end of the arena in all three workloads, for the same reason: once the front is shredded, only the untouched tail can serve larger requests.
 
-This is the expected textbook result, and it is why splitting and coalescing are always used together. It is recorded here separately so ADR-006 has a clean before/after.
+This is the expected textbook result, and it is why splitting and coalescing are always used together. It is recorded here separately so ADR-006 has a clean before/after. **Resolved by [ADR-006](006-coalescing.md):** OOM back to 0 on all workloads.
 
 ### Other consequences
 - Allocation now always unlinks a block and may push a remainder: one more list operation per split allocation. Timing impact is unmeasured until Phase 5. Rerun the timing benchmarks on this commit then.

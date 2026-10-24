@@ -104,21 +104,3 @@ TEST_F(Split, OneByteTooManyFails) {
     EXPECT_EQ(h.malloc(usable() - 7), nullptr);
     EXPECT_HEAP_OK(h);
 }
-
-TEST_F(Split, NoCoalescingYetFreedNeighboursStaySeparate) {
-    // Baseline for ADR-006: two adjacent freed blocks cannot serve a request
-    // larger than either one alone, even though together they would fit.
-    Heap small;
-    ASSERT_TRUE(small.init(16u << 10));   // one 16 KiB page
-    void* a = small.malloc(4000);
-    void* b = small.malloc(4000);
-    void* c = small.malloc(4000);
-    // a..c are 4016 B blocks; d takes exactly what is left of the page.
-    void* d = small.malloc(small.arena().size() - 16 - 3 * block_size_for(4000) - 8);
-    ASSERT_TRUE(a && b && c && d);
-    small.free(a);
-    small.free(b);
-    EXPECT_EQ(small.free_summary().count, 2u);
-    EXPECT_EQ(small.malloc(6000), nullptr);
-    EXPECT_HEAP_OK(small);
-}

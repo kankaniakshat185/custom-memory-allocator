@@ -9,10 +9,11 @@ bool Heap::init(std::size_t arena_bytes) {
     epilogue_ = base + arena_.size() - kHeaderSize;
     reinterpret_cast<Header*>(epilogue_)->word = kAllocBit;  // size 0, allocated
 
-    // Arena size is a page multiple, so this is a multiple of 16.
+    // Arena size is a page multiple, so this is a multiple of 16. The first
+    // block claims an allocated predecessor so coalescing never looks before it.
     Header* h = reinterpret_cast<Header*>(first_);
-    h->word = static_cast<std::size_t>(epilogue_ - first_);
-    footer(h)->word = h->word;
+    h->word = static_cast<std::size_t>(epilogue_ - first_) | kPrevAllocBit;
+    write_footer(h);
     list_push(h);
     return true;
 }
@@ -50,14 +51,16 @@ void* Heap::malloc(std::size_t n) {
 
     const std::size_t have = block_size(h);
     if (have - need >= kMinBlock) {
-        // Allocate the front, return the tail to the free list (ADR-005).
-        h->word = need | kAllocBit;
+        // Allocate the front, return the tail to the free list (ADR-005). The
+        // block after the tail already has its prev-alloc bit clear.
+        h->word = need | kAllocBit | (h->word & kPrevAllocBit);
         Header* rest = next_block(h);
-        rest->word = have - need;
-        footer(rest)->word = rest->word;
+        rest->word = (have - need) | kPrevAllocBit;
+        write_footer(rest);
         list_push(rest);
     } else {
         h->word |= kAllocBit;
+        next_block(h)->word |= kPrevAllocBit;
     }
 
     const std::size_t end = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(next_block(h)) -
@@ -85,9 +88,30 @@ FreeStatus Heap::free(void* p) {
 
     stats_.bytes_in_use -= sz;
     --stats_.live_blocks;
-    h->word = sz;  // clear alloc bit
-    footer(h)->word = sz;
-    list_push(h);
+    // Clear the alloc bit first: if this block is absorbed into its
+    // predecessor, the stale header must still read as free so an immediate
+    // second free is reported as a double free.
+    h->word &= ~kAllocBit;
+
+    // Coalesce with both neighbours (ADR-006). The epilogue reads as
+    // allocated, and the first block claims an allocated predecessor, so
+    // neither direction needs a boundary check.
+    Header* merged = h;
+    std::size_t total = sz;
+    Header* next = next_block(h);
+    if (!is_alloc(next)) {
+        list_remove(next);
+        total += block_size(next);
+    }
+    if (!prev_alloc(h)) {
+        merged = prev_block(h);
+        list_remove(merged);
+        total += block_size(merged);
+    }
+    merged->word = total | (merged->word & kPrevAllocBit);
+    write_footer(merged);
+    next_block(merged)->word &= ~kPrevAllocBit;
+    list_push(merged);
     return FreeStatus::Ok;
 }
 
@@ -97,10 +121,11 @@ bool Heap::check(const char** why) const {
         return false;
     };
     if (arena_.base() == nullptr) return fail("heap not initialised");
-    if (reinterpret_cast<const Header*>(epilogue_)->word != kAllocBit)
-        return fail("epilogue header corrupted");
+    const Header* epi = reinterpret_cast<const Header*>(epilogue_);
+    if ((epi->word & ~kPrevAllocBit) != kAllocBit) return fail("epilogue header corrupted");
 
     std::size_t walk_free = 0, walk_alloc = 0, in_use = 0;
+    bool prev_was_alloc = true;  // the first block claims an allocated predecessor
     for (std::uint8_t* p = first_; p < epilogue_;) {
         Header* h = reinterpret_cast<Header*>(p);
         const std::size_t sz = block_size(h);
@@ -109,15 +134,19 @@ bool Heap::check(const char** why) const {
         if (p + sz > epilogue_) return fail("block overruns epilogue");
         if (reinterpret_cast<std::uintptr_t>(payload(h)) % kAlign != 0)
             return fail("payload misaligned");
+        if (prev_alloc(h) != prev_was_alloc) return fail("prev-alloc bit disagrees with predecessor");
         if (is_alloc(h)) {
             ++walk_alloc;
             in_use += sz;
         } else {
             ++walk_free;
-            if (footer(h)->word != h->word) return fail("footer disagrees with header");
+            if (!prev_was_alloc) return fail("adjacent free blocks (missed coalesce)");
+            if (footer(h)->word != sz) return fail("footer disagrees with header");
         }
+        prev_was_alloc = is_alloc(h);
         p += sz;
     }
+    if (prev_alloc(epi) != prev_was_alloc) return fail("epilogue prev-alloc bit wrong");
     if (walk_alloc != stats_.live_blocks) return fail("live block count mismatch");
     if (in_use != stats_.bytes_in_use) return fail("bytes_in_use mismatch");
 

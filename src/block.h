@@ -16,7 +16,7 @@ constexpr std::size_t kHeaderSize = 8;
 constexpr std::size_t kMinBlock = 32;  // header + next + prev + footer
 
 constexpr std::uint64_t kAllocBit = 0x1;      // this block is allocated
-constexpr std::uint64_t kPrevAllocBit = 0x2;  // reserved: maintained from Phase 3 (coalescing)
+constexpr std::uint64_t kPrevAllocBit = 0x2;  // previous block is allocated (ADR-006)
 constexpr std::uint64_t kFlagMask = 0xF;
 
 struct Header {
@@ -32,6 +32,7 @@ constexpr std::size_t align_up(std::size_t n, std::size_t a) { return (n + a - 1
 
 inline std::size_t block_size(const Header* h) { return h->word & ~kFlagMask; }
 inline bool is_alloc(const Header* h) { return (h->word & kAllocBit) != 0; }
+inline bool prev_alloc(const Header* h) { return (h->word & kPrevAllocBit) != 0; }
 
 inline void* payload(Header* h) { return reinterpret_cast<std::uint8_t*>(h) + kHeaderSize; }
 inline Header* header_of(void* p) {
@@ -44,6 +45,13 @@ inline Header* footer(Header* h) {
 }
 inline Header* next_block(Header* h) {
     return reinterpret_cast<Header*>(reinterpret_cast<std::uint8_t*>(h) + block_size(h));
+}
+// Footers hold the size only; flags live in the header.
+inline void write_footer(Header* h) { footer(h)->word = block_size(h); }
+// Only valid when !prev_alloc(h): the previous block is free, so it has a footer.
+inline Header* prev_block(Header* h) {
+    const std::size_t prev_size = (h - 1)->word;
+    return reinterpret_cast<Header*>(reinterpret_cast<std::uint8_t*>(h) - prev_size);
 }
 
 // Block size needed to serve a request of n payload bytes.

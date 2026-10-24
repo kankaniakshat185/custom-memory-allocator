@@ -24,8 +24,9 @@ struct FreeSummary {
 
 // Explicit doubly-linked free list, LIFO insert, first-fit (ADR-002).
 // The arena starts as one free block followed by a zero-size allocated
-// epilogue header; oversized free blocks are split on allocation (ADR-005).
-// No coalescing yet. Single-threaded.
+// epilogue header; oversized free blocks are split on allocation (ADR-005)
+// and freed blocks merge with free neighbours in both directions (ADR-006).
+// Single-threaded.
 class Heap {
 public:
     bool init(std::size_t arena_bytes);

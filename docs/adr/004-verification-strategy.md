@@ -28,7 +28,14 @@ Walks every block from the first header to the epilogue, then walks the free lis
 | Free list: every node inside the heap, marked free, `prev` links consistent | List corruption |
 | Free list length == free blocks found by the walk == `stats().free_blocks` | Leaked or doubly-listed blocks, cycles (walk is bounded) |
 
-Each phase extends the checker with the invariants it introduces. Phase 3 (coalescing) adds: no two adjacent free blocks, and every prev-allocated bit matches its predecessor.
+Each phase extends the checker with the invariants it introduces. Added in Phase 3 (coalescing, ADR-006):
+
+| Invariant | Catches |
+|---|---|
+| No two adjacent free blocks | Missed coalesce in either direction |
+| Every header's prev-allocated bit matches the previous block's state | Stale bit, so `free` would read a non-existent footer or skip a merge |
+| Epilogue's prev-allocated bit matches the last block | Stale bit at the heap end |
+| Footer == block size (flags live only in headers) | Stale footer after split/merge |
 
 It returns `false` plus a static message instead of asserting, so tests can report *which* invariant broke at *which* operation.
 
@@ -36,8 +43,8 @@ It returns `false` plus a static message instead of asserting, so tests can repo
 
 | Layer | Files | Purpose |
 |---|---|---|
-| Unit | `test_arena.cpp`, `test_heap_unit.cpp`, `test_split.cpp`, `test_alignment.cpp` | One behaviour per test on a fresh, small `Heap`. Exact assertions on addresses, block sizes, free-list counts. |
-| Randomised stress | `test_stress.cpp` | Seeded alloc/free sequences with `check()` after **every** operation. Each block is filled with a per-block byte pattern that is verified before free, so overlapping blocks are caught even if the headers look valid. One configuration uses a 64 KiB arena to keep the OOM path constantly exercised, and asserts that OOM actually occurred. |
+| Unit | `test_arena.cpp`, `test_heap_unit.cpp`, `test_split.cpp`, `test_coalesce.cpp`, `test_alignment.cpp` | One behaviour per test on a fresh, small `Heap`. Exact assertions on addresses, block sizes, free-list counts. |
+| Randomised stress | `test_stress.cpp` | Seeded alloc/free sequences with `check()` after **every** operation. Each block is filled with a per-block byte pattern that is verified before free, so overlapping blocks are caught even if the headers look valid. One configuration uses a 64 KiB arena to keep the OOM path constantly exercised, and asserts that OOM actually occurred. Since Phase 3, each seed must also end with exactly one free block spanning the arena. |
 | Integration | `test_api_integration.cpp` | The public C API on the real 256 MiB process heap, used like a program would: linked lists, strings, a 32 MiB block, and death tests that a double or invalid free aborts with a diagnostic. |
 
 `Heap::free` returns a status (`Ok`, `InvalidPointer`, `DoubleFree`) so error handling is unit-testable without death tests. Only the C wrapper aborts, and that path is covered by integration death tests.
@@ -56,11 +63,12 @@ Tests build in Debug with UBSan on. `check()` is never called from benchmark bui
 5. **Property-based testing library (e.g. RapidCheck).** Adds input shrinking, but another dependency for little gain over seeded loops with operation-indexed failure messages. Rejected.
 
 ## Consequences
-- `check()` is O(heap blocks + free blocks), so per-operation stress tests are effectively quadratic. Workloads were sized to keep the full suite under ~5 s, which held in Phase 1 (~4 s). In Phase 2 the suite takes ~20 s because fragmentation without coalescing inflates the block count (ADR-005). The workloads were not shrunk to hide that.
+- `check()` is O(heap blocks + free blocks), so per-operation stress tests are effectively quadratic. Workloads were sized to keep the full suite under ~5 s, which held in Phase 1 (~4 s). In Phase 2 the suite took ~20 s because fragmentation without coalescing inflated the block count (ADR-005). The workloads were not shrunk to hide that, and coalescing brought it back to ~8.5 s for 51 tests (ADR-006).
 - `check()` reads only headers and footers, so it cannot detect a write into a live block's payload. That is what the fill patterns are for.
 - Use-after-free writes into a freed block's payload clobber its free-list links. This is not detected in general, by design (out of scope). A unit test checks that neighbouring live blocks survive it.
 - Freeing an *interior* pointer (into the middle of a block) cannot be detected in general: the 8 bytes before it are arbitrary payload data. Pointers outside the arena or misaligned are rejected.
 
 ## Validation
-- Test count: 31 at the end of Phase 1, 40 at the end of Phase 2 (all passing under UBSan).
+- Test count: 31 at the end of Phase 1, 40 at the end of Phase 2, 51 at the end of Phase 3 (all passing under UBSan).
 - Mutation check (2026-10-24): deleting the `footer(h)->word = sz;` line in `Heap::free` makes the unit tests fail with `heap_check: footer disagrees with header` (e.g. `HeapUnit.AllocReturnsUsableMemory`, `HeapUnit.FirstFitSkipsTooSmallBlocks`). Restoring the line makes them pass again. Repeat this kind of check when adding invariants: a checker that never fails proves nothing.
+- Phase 3 mutation checks (disabling the backward merge; not clearing the successor's prev-allocated bit) are recorded in [ADR-006](006-coalescing.md#validation). Each is caught by 14 or more tests with the specific invariant message.

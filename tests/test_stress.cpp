@@ -46,6 +46,10 @@ std::size_t run(unsigned seed, std::size_t arena, std::size_t max_size, int ops)
     }
     EXPECT_HEAP_OK(h);
     EXPECT_EQ(h.stats().live_blocks, 0u);
+    // With coalescing, freeing everything must restore the pristine arena.
+    const auto f = h.free_summary();
+    EXPECT_EQ(f.count, 1u);
+    EXPECT_EQ(f.largest, h.arena().size() - 16);
     return oom;
 }
 }  // namespace

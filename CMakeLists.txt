@@ -45,6 +45,7 @@ add_executable(myalloc_tests
   tests/test_arena.cpp
   tests/test_heap_unit.cpp
   tests/test_split.cpp
+  tests/test_coalesce.cpp
   tests/test_alignment.cpp
   tests/test_stress.cpp
   tests/test_api_integration.cpp)

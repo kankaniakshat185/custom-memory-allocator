@@ -11,7 +11,7 @@ ADR-001 chose an intrusive explicit free list. This ADR fixes the concrete block
 ## Decision
 - **Alignment:** 16 B. Block starts are 8 mod 16, so `payload = header + 8` is 16-aligned. Arena base is page-aligned; first header sits at `base + 8`.
 - **Header:** 8 B word = `size | flags`. Sizes are multiples of 16, so the low 4 bits are flags. Bit 0 = allocated. Bit 1 (prev-allocated) is reserved and first maintained in Phase 3.
-- **Free block:** `[header][next][prev] … [footer]`, footer = copy of the header word. Minimum block 32 B. Allocated blocks have no footer.
+- **Free block:** `[header][next][prev] … [footer]`, footer = copy of the header word. (Changed in ADR-006: the footer now holds the size only.) Minimum block 32 B. Allocated blocks have no footer.
 - **Block size for a request n:** `max(32, align_up(n + 8, 16))`. `malloc(0)` returns a real minimum block.
 - **Free list:** doubly linked, LIFO insert, head pointer only.
 - **Fit policy:** first-fit from the list head.
