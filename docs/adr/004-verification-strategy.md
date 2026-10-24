@@ -53,7 +53,7 @@ It returns `false` plus a static message instead of asserting, so tests can repo
 `bench/footprint_probe` replays three seeded workloads against a fresh `Heap` and reports internal overhead, arena utilisation, OOM count and the end-of-run free-list shape. Its CSV output is committed per phase in [results/](../results/) and quoted in ADRs. It measures *memory*, not time, so it is immune to timer granularity and scheduling noise.
 
 ### 4. Build configuration
-Tests build in Debug with UBSan on. `check()` is never called from benchmark builds.
+Tests build in Debug with UBSan on. Since Phase 5 (Xcode toolchain), they also run under ASan + UBSan (`build-asan`); all 78 Phase 4 tests pass with no reports. ASan covers the test code and the allocator's own stack and globals; in-arena block corruption is still `check()`'s job (Alternative 1). `check()` is never called from benchmark builds.
 
 ## Alternatives considered
 1. **Rely on ASan with manual poisoning (`ASAN_POISON_MEMORY_REGION` on headers and free payloads).** The best tooling for in-arena overflows, but ASan does not run on this machine. Revisit if a working toolchain becomes available. The checker remains necessary regardless, since poisoning finds bad *accesses*, not bad *bookkeeping*.

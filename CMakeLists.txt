@@ -13,7 +13,7 @@ endif()
 # Test builds: cmake -B build-test -DCMAKE_BUILD_TYPE=Debug
 # Benchmark builds: default Release (-O2 -DNDEBUG), no sanitizers.
 option(MYALLOC_UBSAN "Build with UndefinedBehaviorSanitizer" OFF)
-# ASan currently hangs at startup on this machine (docs/environment.md).
+# ASan needs Xcode's clang; the Command Line Tools' clang 17 hung (docs/environment.md).
 option(MYALLOC_ASAN "Build with AddressSanitizer" OFF)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -58,3 +58,7 @@ gtest_discover_tests(myalloc_tests)
 add_executable(footprint_probe bench/footprint_probe.cpp)
 target_link_libraries(footprint_probe PRIVATE myalloc)
 target_include_directories(footprint_probe PRIVATE src)
+
+add_executable(bench_timing bench/bench_main.cpp bench/workloads.cpp)
+target_link_libraries(bench_timing PRIVATE myalloc)
+target_include_directories(bench_timing PRIVATE src)

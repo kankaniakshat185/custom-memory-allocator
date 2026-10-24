@@ -13,4 +13,4 @@ Rationale and the full invariant list: [ADR-004](adr/004-verification-strategy.m
 
 Per-phase additions: Phase 2 split tests (done, `test_split.cpp`); Phase 3 coalescing (done, `test_coalesce.cpp`, plus the stress tests now require one free block after freeing everything); Phase 4 realloc/calloc (done, `test_realloc.cpp`, realloc stress configurations, STL integration); Phase 6 the same suites run against both fit policies.
 
-Sanitizers: UBSan is on in test builds. ASan is currently unusable on this machine (see [environment.md](environment.md)); `check()` is the primary guard against in-arena corruption.
+Sanitizers: UBSan is on in test builds. ASan + UBSan: `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_ASAN=ON -DMYALLOC_UBSAN=ON` (needs Xcode's clang; see [environment.md](environment.md)). `check()` remains the primary guard against in-arena corruption, which ASan cannot see.

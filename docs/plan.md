@@ -53,9 +53,9 @@ Slack is real slack. Do not spend it on Tier 2 before §7 is met.
 | 2 | Splitting | 0.5 d | Remainder to free list, min-split threshold | ADR-005 |
 | 3 | Coalescing (boundary tags, both directions) | 1.5 d | Coalescing tests, `heap_check()` invariants in every test | ADR-006 |
 | 4 | Realloc, calloc, double-free, OOM | 1 d | Full Tier 1 test suite | ADR-007 |
-| 5 | Benchmark harness: 3 workloads × {libmalloc, first-fit, best-fit} | 1.5 d | `bench/` binary, CSV output, plot script | – |
-| 6 | Best-fit variant + comparison (compile-time policy template) | 1 d | Variant selectable with no runtime branch | ADR-008 |
-| 7 | Profiling and analysis (Instruments) | 1.5 d | Profiler-backed "why" sections; segregated lists only if justified | ADR-009 (+ ADR-010 conditional) |
+| 5 | Benchmark harness: 3 workloads × {libmalloc, first-fit, best-fit} | 1.5 d | `bench/` binary, CSV output, plot script | ADR-008 (methodology) |
+| 6 | Best-fit variant + comparison (compile-time policy template) | 1 d | Variant selectable with no runtime branch | ADR-009 |
+| 7 | Profiling and analysis (Instruments) | 1.5 d | Profiler-backed "why" sections; segregated lists only if justified | ADR-010 (+ ADR-011 conditional) |
 | 8 | README, results table, ADR consistency pass | 1 d | Tag `v1.0` | – |
 
 ## 4. Benchmark methodology
@@ -87,7 +87,7 @@ Also document in every ADR that libmalloc is a multi-zone, size-class allocator 
 | Microarchitectural "why" | Instruments **CPU Counters** (bottleneck breakdown) | Apple Silicon only; check availability on this OS/Xcode in Phase 0. |
 | libmalloc footprint | Instruments **Allocations**, `vmmap`, `heap`, `leaks` CLI tools | Cannot observe `my_malloc` (see §4). |
 | Own-allocator footprint | Allocator debug stats + `task_info` | Built in Phase 4/5. |
-| Fallback if Instruments unavailable | `sample <pid>` / `spindump` for stacks; wall-clock harness + counters for the rest | Weaker for the "why"; call it out in ADR-009 if used. |
+| Fallback if Instruments unavailable | `sample <pid>` / `spindump` for stacks; wall-clock harness + counters for the rest | Weaker for the "why"; call it out in ADR-010 if used. |
 | Correctness | GoogleTest + **`heap_check()` after every op in stress tests** | Primary correctness tool, independent of sanitizers. |
 | Sanitizers | ASan/UBSan **if the Phase 0 hang is resolved** | Even when working, ASan cannot see overflows *inside* the mmap'd arena (it doesn't know the arena's block structure), so it covers test code and the allocator's own stack/globals, not heap corruption within the arena. `heap_check()` and guard patterns cover that. If ASan stays broken, use UBSan alone, `MallocScribble`-style fill patterns in debug builds, and Apple Guard Malloc on the *test code* where useful. |
 
@@ -137,7 +137,7 @@ C++17, GoogleTest, custom wall-clock harness. Builds: test config (`-O0 -g`, san
 
 1. All tests pass; `heap_check()` passes after every operation in the stress tests; sanitizer status (clean, or documented as unavailable) recorded.
 2. Three workloads × three allocators (libmalloc, first-fit, best-fit) have repeatable numbers, with the run-to-run spread reported.
-3. ADR-001 through ADR-008 complete with measured before/after numbers.
+3. ADR-001 through ADR-009 complete with measured before/after numbers.
 4. README results table filled in; at least one profiler-backed explanation of a result (or the documented fallback if Instruments was unavailable).
 
 Tier 2 order if time remains: debug stats (0.5 d) → `operator new` + `std::vector` demo (0.5–1 d) → slab fast path (2 d) → thread safety last. Note: arm64 has a weaker memory model than x86; relevant only once threads arrive.

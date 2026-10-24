@@ -1,6 +1,6 @@
 # ADR-007: realloc (in place where possible) and calloc
 
-- Status: **Accepted provisionally.** Correctness is final. The in-place *policy* is to be re-evaluated after ADR-008 (fit policy) and the Phase 5 timing benchmarks; see "Revisit criteria".
+- Status: **Accepted provisionally.** Correctness is final. The in-place *policy* is to be re-evaluated after ADR-009 (fit policy) and the Phase 5 timing benchmarks; see "Revisit criteria".
 - Date: 2026-10-24
 - Environment: see [../environment.md](../environment.md)
 - Before: commit `0ad7359` (phase-3-coalescing), which had no realloc/calloc
@@ -63,12 +63,12 @@ The probe workload (`footprint_probe realloc`, seed 4, 200,000 ops) mixes growab
 - **Copying is roughly halved:** −55% bytes copied at 32 MiB, −42% at 64 MiB. That was the intended benefit, and it holds.
 - **Footprint gets much worse, and it is unbounded.** With room to spare (64 MiB), in-place realloc's high-water is 2.1× the naive policy's (62.2 vs. 29.2 MB). The naive policy's high-water is identical in both arenas, which means it is self-limiting. The in-place policy expands to fill the arena it is given, and when the arena is tight (32 MiB) it fails 5,011 times where naive fails 0.
 - **Hypothesis "in-place shrinking causes it" (a small block left pinned at the front of what would have become a 64 KiB hole): refuted as the main cause.** The control that moves on shrink still fails 3,927 times at 32 MiB and still reaches 54.7 MB at 64 MiB. Shrinking accounts for roughly a quarter of the excess (7.5 of the 33.0 MB at 64 MiB); growing in place is the main driver.
-- **Mechanism: not yet established.** Working hypothesis, untested: with LIFO first-fit, the remainder that `place()` splits off after an in-place grow goes to the free-list head. The next small "noise" allocation is then carved from directly behind the grown buffer, which blocks its next in-place grow and forces a move further toward the arena end, leaving holes the buffer can't reuse. If that is right, the problem is the *interaction* of in-place grow with LIFO first-fit, not in-place grow itself. Best-fit (ADR-008) would route noise into small holes instead, which is the test.
+- **Mechanism: not yet established.** Working hypothesis, untested: with LIFO first-fit, the remainder that `place()` splits off after an in-place grow goes to the free-list head. The next small "noise" allocation is then carved from directly behind the grown buffer, which blocks its next in-place grow and forces a move further toward the arena end, leaving holes the buffer can't reuse. If that is right, the problem is the *interaction* of in-place grow with LIFO first-fit, not in-place grow itself. Best-fit (ADR-009) would route noise into small holes instead, which is the test.
 - **Scope of this result:** one synthetic workload, designed to be realloc-heavy. The three original workloads don't use realloc, so their numbers are unaffected (byte-identical, see above).
 
 ### Revisit criteria (why this is provisional)
 In-place realloc stays, because it is the standard design, it halves copying, and the code is verified. But the policy is re-decided once these two results exist:
-1. **ADR-008 (best-fit):** rerun `footprint_probe realloc` under best-fit. If the footprint gap to naive closes, the gap was a fit-policy interaction, and in-place stays.
+1. **ADR-009 (best-fit):** rerun `footprint_probe realloc` under best-fit. If the footprint gap to naive closes, the gap was a fit-policy interaction, and in-place stays.
 2. **Phase 5 timing:** measure realloc-heavy throughput for all three policies. If the copy savings don't show up as time, and the footprint gap remains after (1), switch to grow-only, or to naive with a threshold.
 
 ### Other consequences

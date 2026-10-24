@@ -16,7 +16,7 @@ Intrusive, explicit, doubly-linked free list, LIFO insertion, next/prev stored i
 2. **Bitmap over fixed-size granules:** O(1) state lookup, but needs a side structure (violates "no separate bookkeeping"), finding N free granules is a scan, and granule size trades internal fragmentation against bitmap size.
 3. **Singly-linked free list:** smaller min block, but unlinking during coalescing is O(n). Rejected: coalescing is the key feature.
 4. **Address-ordered free list:** lower fragmentation, but O(n) insert on free. Deferred as a follow-up ADR candidate.
-5. **Segregated size-class lists:** likely answer to O(n) search; out of Tier 1 scope unless profiling motivates it (ADR-010).
+5. **Segregated size-class lists:** likely answer to O(n) search; out of Tier 1 scope unless profiling motivates it (ADR-011).
 6. **Buddy system / balanced tree:** rejected; power-of-two internal fragmentation (buddy) or complexity (tree) with no Tier 1 benefit.
 
 ## Consequences
@@ -24,7 +24,7 @@ Intrusive, explicit, doubly-linked free list, LIFO insertion, next/prev stored i
 - Cons: 32 B minimum block (quantify waste for tiny requests); O(free blocks) search; LIFO order may fragment more than address order.
 - **Measured impact:** footprint numbers per phase are in ADR-005 onward ([results/](../results/)). Timing (ns/op vs. libmalloc) and profiler explanation: TBD in Phase 5/7. The implicit-list reference point was not built; the comparison will be against libmalloc and between phases instead.
 - Limitation: baseline is libmalloc; Nano-zone control result (`MallocNanoZone=0`) TBD, or "no control possible".
-- Follow-ups: ADR-002 header layout, ADR-005 splitting, ADR-006 coalescing, ADR-008 fit policy.
+- Follow-ups: ADR-002 header layout, ADR-005 splitting, ADR-006 coalescing, ADR-009 fit policy.
 
 ## Validation
 - Hypothesis: allocation cost is dominated by free-list search length, which grows with fragmentation; O(1) free and coalesce keep `free` flat across workloads.
