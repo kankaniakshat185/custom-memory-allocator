@@ -47,7 +47,7 @@ Internal overhead is unchanged (1.01–1.02×). Both policies split the same way
 
 Under best-fit, in-place realloc's footprint is within 1% of naive, identical in the 32 and 64 MiB arenas (so bounded), with zero OOM. It still copies 55% fewer bytes. Its in-place hit rate falls from ~50% to 28%, because best-fit packs blocks more tightly, so a buffer's successor is less often free.
 
-### Time (one run, median ns/op, IQR ≤ 4.9% on every row)
+### Time (one run, median ns/op, IQR ≤ 4.9% on every row; pre-hardening, see ADR-012 for current numbers — the ranking is unchanged)
 | Workload | libmalloc (default) | **First-fit** | **Best-fit** | BF ÷ FF | Batch p99 FF → BF |
 |---|---|---|---|---|---|
 | random 16 B–64 KiB | 28.66 | **16.14** | 206.95 | **12.8×** | 26.7 → 304.6 ns |

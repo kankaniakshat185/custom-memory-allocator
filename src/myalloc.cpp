@@ -29,13 +29,22 @@ void die_if_bad(myalloc::FreeStatus st, const char* who) {
         case myalloc::FreeStatus::InvalidPointer:
             std::fprintf(stderr, "%s: invalid pointer\n", who);
             break;
+        case myalloc::FreeStatus::HeapCorrupted:
+            std::fprintf(stderr, "%s: heap corruption detected (free-list metadata overwritten)\n", who);
+            break;
     }
     std::abort();
 }
 
+// A NULL caused by detected corruption aborts instead of looking like OOM.
+void* checked(void* p, const char* who) {
+    if (!p && myalloc::default_heap().corrupted()) die_if_bad(myalloc::FreeStatus::HeapCorrupted, who);
+    return p;
+}
+
 }  // namespace
 
-void* my_malloc(size_t n) { return myalloc::default_heap().malloc(n); }
+void* my_malloc(size_t n) { return checked(myalloc::default_heap().malloc(n), "my_malloc"); }
 
 void my_free(void* p) { die_if_bad(myalloc::default_heap().free(p), "my_free"); }
 
@@ -46,6 +55,8 @@ void* my_realloc(void* p, size_t n) {
     return q;
 }
 
-void* my_calloc(size_t count, size_t size) { return myalloc::default_heap().calloc(count, size); }
+void* my_calloc(size_t count, size_t size) {
+    return checked(myalloc::default_heap().calloc(count, size), "my_calloc");
+}
 
 }  // extern "C"

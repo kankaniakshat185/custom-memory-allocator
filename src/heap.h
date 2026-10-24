@@ -6,8 +6,10 @@
 
 namespace myalloc {
 
-// Result of validating a pointer passed to free/realloc.
-enum class FreeStatus { Ok, InvalidPointer, DoubleFree };
+// Result of validating a pointer passed to free/realloc. HeapCorrupted means
+// free-list metadata was found overwritten (e.g. by a use-after-free write);
+// the heap then refuses all further operations (ADR-012).
+enum class FreeStatus { Ok, InvalidPointer, DoubleFree, HeapCorrupted };
 
 struct HeapStats {
     std::size_t bytes_in_use = 0;   // sum of allocated block sizes (incl. headers)
@@ -28,23 +30,34 @@ struct FreeSummary {
     std::size_t largest = 0;
 };
 
+struct FitResult {
+    Header* block;  // nullptr if nothing fits (or corrupt)
+    bool corrupt;   // a list node failed validation; nothing past it was read
+};
+
 // Fit policies (ADR-009). find() returns a free block of at least `need`
-// bytes, or nullptr, and adds the number of list nodes it visited to `steps`.
+// bytes and adds the number of list nodes it visited to `steps`. Every node is
+// passed to valid(node) before its size or links are read, so links
+// overwritten by a use-after-free are never followed (ADR-012).
 struct FirstFit {
-    static Header* find(Header* head, std::size_t need, std::size_t& steps) {
+    template <class Valid>
+    static FitResult find(Header* head, std::size_t need, std::size_t& steps, Valid&& valid) {
         for (Header* h = head; h; h = links(h)->next) {
+            if (!valid(h)) return {nullptr, true};
             ++steps;
-            if (block_size(h) >= need) return h;
+            if (block_size(h) >= need) return {h, false};
         }
-        return nullptr;
+        return {nullptr, false};
     }
 };
 
 struct BestFit {
-    static Header* find(Header* head, std::size_t need, std::size_t& steps) {
+    template <class Valid>
+    static FitResult find(Header* head, std::size_t need, std::size_t& steps, Valid&& valid) {
         Header* best = nullptr;
         std::size_t best_size = ~std::size_t{0};
         for (Header* h = head; h; h = links(h)->next) {
+            if (!valid(h)) return {nullptr, true};
             ++steps;
             const std::size_t sz = block_size(h);
             if (sz >= need && sz < best_size) {
@@ -53,7 +66,7 @@ struct BestFit {
                 if (sz == need) break;  // cannot do better than exact
             }
         }
-        return best;
+        return {best, false};
     }
 };
 
@@ -87,21 +100,32 @@ public:
 
     const HeapStats& stats() const { return stats_; }
     const Arena& arena() const { return arena_; }
+    // Sticky: set when free-list metadata fails validation (ADR-012).
+    bool corrupted() const { return corrupt_; }
 
 private:
     FreeStatus validate(void* p) const;
     Header* find_fit(std::size_t need);
     void place(Header* h, std::size_t total, std::size_t need);
-    void release(Header* h);
+    bool release(Header* h);
     void note_extent(Header* h);
     void list_push(Header* h);
-    void list_remove(Header* h);
+    bool in_heap(const Header* h) const;
+    bool plausible_free(const Header* h) const;
+    bool unlinkable(Header* h) const;
+    void unlink(Header* h);
+    bool list_remove(Header* h);
+    bool mark_corrupt() {
+        corrupt_ = true;
+        return false;
+    }
 
     Arena arena_;
     std::uint8_t* first_ = nullptr;     // first block header (base + 8)
     std::uint8_t* epilogue_ = nullptr;  // zero-size allocated header at arena end - 8
     Header* free_head_ = nullptr;
     HeapStats stats_;
+    bool corrupt_ = false;
 };
 
 extern template class BasicHeap<FirstFit>;

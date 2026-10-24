@@ -23,3 +23,4 @@
 | [009](adr/009-first-fit-vs-best-fit.md) | Fit policy: first-fit vs. best-fit, compile-time | Accepted (first-fit default) |
 | 010 | Profiler findings | Planned |
 | 011 | Segregated size-class free lists | Motivated by 009's measurements; scope decision pending (stretch) |
+| [012](adr/012-use-after-free-hardening.md) | Use-after-free hardening: validated links, safe unlinking, fail-stop | Accepted |

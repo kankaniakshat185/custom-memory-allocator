@@ -43,6 +43,10 @@ inline Header* footer(Header* h) {
     return reinterpret_cast<Header*>(reinterpret_cast<std::uint8_t*>(h) + block_size(h) -
                                      kHeaderSize);
 }
+inline const Header* footer(const Header* h) {
+    return reinterpret_cast<const Header*>(reinterpret_cast<const std::uint8_t*>(h) +
+                                           block_size(h) - kHeaderSize);
+}
 inline Header* next_block(Header* h) {
     return reinterpret_cast<Header*>(reinterpret_cast<std::uint8_t*>(h) + block_size(h));
 }

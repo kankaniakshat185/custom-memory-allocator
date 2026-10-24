@@ -11,6 +11,10 @@ void* my_malloc(size_t n);
 
 // Frees a pointer from my_malloc. NULL is a no-op. A pointer outside the arena
 // or an already-freed block aborts with a diagnostic (like glibc).
+//
+// All functions abort with a diagnostic if they detect that free-list metadata
+// was overwritten (e.g. by a write through a dangling pointer), instead of
+// following corrupted links (ADR-012).
 void my_free(void* p);
 
 // Resizes p to at least n bytes, preserving the first min(old, n) bytes.

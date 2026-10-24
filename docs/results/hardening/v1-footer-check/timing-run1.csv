@@ -1,0 +1,17 @@
+label,allocator,workload,ops,reps,min_ns,median_ns,max_ns,spread_pct,batch_p50_ns,batch_p99_ns,failures_per_rep
+phase6,heap,random_16B_64KiB,1003690,15,16.06,16.26,16.87,4.9,15.58,28.84,0
+phase6,heap_bestfit,random_16B_64KiB,1003690,15,222.30,227.98,236.30,6.1,225.34,329.71,0
+phase6,heap,app_like,1006958,15,16.51,16.72,17.26,4.5,15.91,27.36,0
+phase6,heap_bestfit,app_like,1006958,15,51.18,51.76,57.37,12.0,51.19,78.56,0
+phase6,heap,adversarial_holes,420000,15,622.81,633.05,657.37,5.5,8.54,7646.37,0
+phase6,heap_bestfit,adversarial_holes,420000,15,622.76,633.84,737.42,18.1,8.95,7862.69,0
+phase6,heap,realloc_growth,508938,15,27.39,27.94,29.61,7.9,26.98,51.17,0
+phase6,heap_bestfit,realloc_growth,508938,15,97.09,97.70,98.72,1.7,82.30,318.50,0
+current,heap,random_16B_64KiB,1003690,15,21.12,21.30,22.21,5.1,20.47,38.57,0
+current,heap_bestfit,random_16B_64KiB,1003690,15,381.98,390.10,474.57,23.7,384.44,633.62,0
+current,heap,app_like,1006958,15,22.07,24.74,28.01,24.0,22.38,60.67,0
+current,heap_bestfit,app_like,1006958,15,91.58,92.36,95.14,3.9,92.00,126.27,0
+current,heap,adversarial_holes,420000,15,867.56,876.42,907.48,4.6,10.09,10541.57,0
+current,heap_bestfit,adversarial_holes,420000,15,867.27,874.59,909.70,4.9,10.38,10492.14,0
+current,heap,realloc_growth,508938,15,32.69,33.64,36.53,11.4,32.76,54.66,0
+current,heap_bestfit,realloc_growth,508938,15,134.20,134.94,150.46,12.1,120.28,393.77,0

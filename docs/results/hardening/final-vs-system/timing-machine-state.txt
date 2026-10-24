@@ -1,0 +1,21 @@
+hardening cost runs started 2026-10-25 01:22:21 from the Claude Code session
+ 1:22  up  2:23, 2 users, load averages: 4.89 3.95 3.70
+ %CPU COMM
+ 32.1 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 14.3 /Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper (Renderer).app/
+ 13.8 /Users/akshatkankani/.vscode/extensions/anthropic.claude-code-2.1.310-darwin-arm64/r
+finished 2026-10-25 01:23:41
+ 1:23  up  2:25, 2 users, load averages: 3.17 3.67 3.62
+v2 (no footer check in plausible_free) runs started 2026-10-25 01:24:29;  1:24  up  2:25, 2 users, load averages: 2.55 3.45 3.54
+finished 2026-10-25 01:25:43;  1:25  up  2:27, 2 users, load averages: 2.54 3.23 3.44
+run 3 finished 2026-10-25 01:26:49;  1:26  up  2:28, 2 users, load averages: 3.13 3.27 3.44
+final hardened vs libmalloc run started 2026-10-25 01:31:52;  1:31  up  2:33, 2 users, load averages: 3.45 3.62 3.61
+final run finished 2026-10-25 01:32:15;  1:32  up  2:33, 2 users, load averages: 3.31 3.58 3.59
+
+Notes added afterwards (not logged at run time):
+- v3 (in_heap only) and v4 (in_heap + free bit) runs, 2 each: ran 01:27-01:30.
+  uptime before: load 5.95 4.13 3.75; after: load 3.20 3.78 3.67 (from the command output).
+- Final run: a VS Code renderer was at ~182% CPU in a snapshot taken just before
+  the run started (likely the editor reacting to files moved seconds earlier).
+  Per-rep data shows only the first rep of the first rows slightly elevated
+  (e.g. system random 31.1 vs ~29.1 for the rest); no row has IQR > 10%.

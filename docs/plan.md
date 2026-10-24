@@ -55,6 +55,7 @@ Slack is real slack. Do not spend it on Tier 2 before §7 is met.
 | 4 ✅ | Realloc, calloc, double-free, OOM | 1 d | Full Tier 1 test suite | ADR-007 |
 | 5 ✅ | Benchmark harness: 3 workloads × {libmalloc, first-fit, best-fit} | 1.5 d | `bench/` binary, CSV output, plot script | ADR-008 (methodology) |
 | 6 ✅ | Best-fit variant + comparison (compile-time policy template) | 1 d | Variant selectable with no runtime branch | ADR-009 |
+| 6b ✅ | Use-after-free hardening (closes a requirements gap found in review) | 0.5 d | Validated links, safe unlinking, fail-stop, UAF fuzz test | ADR-012 |
 | 7 | Profiling and analysis (Instruments) | 1.5 d | Profiler-backed "why" sections; segregated lists only if justified | ADR-010 (+ ADR-011 conditional) |
 | 8 | README, results table, ADR consistency pass | 1 d | Tag `v1.0` | – |
 

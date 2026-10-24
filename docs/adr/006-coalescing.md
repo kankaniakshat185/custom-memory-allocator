@@ -75,7 +75,7 @@ Internal overhead stays at ADR-005's level (1.003–1.021×). Coalescing doesn't
 
 ### Other consequences
 - `free` is still O(1): at most two `list_remove`s, one footer read and three header writes. Its cost is included in the Phase 3 numbers above; isolating free vs. malloc cost needs the profiler (ADR-010).
-- A use-after-free write into a *freed* block can now corrupt more state: the merged block's size or links span what used to be several blocks. Still out of scope (ADR-004). The checker would report it at the next operation in tests.
+- A use-after-free write into a *freed* block can now corrupt more state: the merged block's size or links span what used to be several blocks. Still out of scope (ADR-004). The checker would report it at the next operation in tests. **Superseded by [ADR-012](012-use-after-free-hardening.md):** links and footers are now validated before use, so such writes are detected or harmless, never a crash.
 - Double-free of an absorbed block is detected only until that memory is reused. After reuse the stale header is overwritten by live data. Inherent without separate metadata; documented.
 - Every allocation now writes a header just past the allocated block: the successor's (prev-allocated bit) or the split remainder's. For large blocks that is a different cache line (128 B on M2) from the block's own header. To be checked in the Phase 7 profile.
 

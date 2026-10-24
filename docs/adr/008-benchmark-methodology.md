@@ -49,6 +49,8 @@ ADR-005 to ADR-007 have deterministic *footprint* numbers but no *timing*. Phase
 
 ## Results (native arm64, 2026-10-25)
 
+> These are **pre-hardening** numbers (commit `c27e2d8`). After ADR-012 the heap does more validation per operation; current numbers vs. libmalloc are in [ADR-012](012-use-after-free-hardening.md) ("Final numbers vs. libmalloc"). The methodology and the phase-to-phase comparison are unaffected.
+
 ### This allocator vs. libmalloc (one run, 00:54; median ns/op, IQR all ≤ 4.3%)
 | Workload | libmalloc (Nano on, default) | libmalloc, Nano off | **This heap** | Heap vs. default libmalloc | Batch p99, libmalloc → heap |
 |---|---|---|---|---|---|

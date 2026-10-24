@@ -28,7 +28,7 @@ ADR-001 chose an intrusive explicit free list. This ADR fixes the concrete block
 
 ## Consequences
 - Known weaknesses, deliberately left for later ADRs: internal waste (a 16 B request can consume a large freed block), and external fragmentation (no coalescing). The stress tests do not assert on these.
-- Use-after-free writes clobber a freed block's `next`/`prev`; this can corrupt the free list. Documented limitation; neighbouring live blocks are unaffected (tested).
+- Use-after-free writes clobber a freed block's `next`/`prev`; this can corrupt the free list. Documented limitation; neighbouring live blocks are unaffected (tested). **Superseded by [ADR-012](012-use-after-free-hardening.md):** this violated a project requirement (a single such write followed by `malloc` segfaulted); links are now validated before being followed.
 - Single-threaded; `default_heap()` lazy initialisation is not thread-safe.
 - **Measured impact (footprint probe, [results](../results/footprint-phase1-baseline.csv)):** internal overhead 3.83× (random sizes), 7.00× (app-like, with 1,035 OOM failures in a 32 MiB arena for 4.7 MB requested), 1.69× (phase shift). Analysis in ADR-005. **Timing (ADR-008, `run_phases.sh`):** 15.36 ns/op on random sizes (cheapest median of all phases: no split, no merge, bump-pointer fresh memory) but batch p99 96 ns; app-like not comparable (436 OOM failures/rep even in 256 MiB); 2,008.7 ns/op on `adversarial_holes`. The cheap median is paid for with 3.8–7× internal overhead and OOM failures.
 

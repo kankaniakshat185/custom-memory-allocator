@@ -31,8 +31,41 @@ void BasicHeap<Fit>::list_push(Header* h) {
     ++stats_.free_blocks;
 }
 
+// Is h a block start inside the heap? Then its header and free-list links
+// (h .. h + 24) can be read without leaving the arena. This is all the search
+// needs to be safe on a pointer read from a freed payload (ADR-012).
 template <class Fit>
-void BasicHeap<Fit>::list_remove(Header* h) {
+bool BasicHeap<Fit>::in_heap(const Header* h) const {
+    const auto off = static_cast<std::size_t>(reinterpret_cast<const std::uint8_t*>(h) - first_);
+    return off < static_cast<std::size_t>(epilogue_ - first_) && off % kAlign == 0;
+}
+
+// Could h be a free block on the list? Reads only h's header (which a
+// use-after-free write cannot reach) after in_heap(). Used before any link is
+// rewritten. The footer is deliberately not checked: it is on a different
+// cache line, and release() bounds it where it is used (ADR-012).
+template <class Fit>
+bool BasicHeap<Fit>::plausible_free(const Header* h) const {
+    if (!in_heap(h) || is_alloc(h)) return false;
+    const auto* p = reinterpret_cast<const std::uint8_t*>(h);
+    const std::size_t sz = block_size(h);
+    return sz >= kMinBlock && sz <= static_cast<std::size_t>(epilogue_ - p);
+}
+
+// Safe unlinking: h and both neighbours must be plausible and point back at
+// each other before any link is rewritten.
+template <class Fit>
+bool BasicHeap<Fit>::unlinkable(Header* h) const {
+    if (!plausible_free(h)) return false;
+    const FreeLinks* l = links(h);
+    if (l->prev ? !(plausible_free(l->prev) && links(l->prev)->next == h) : free_head_ != h)
+        return false;
+    if (l->next && !(plausible_free(l->next) && links(l->next)->prev == h)) return false;
+    return true;
+}
+
+template <class Fit>
+void BasicHeap<Fit>::unlink(Header* h) {
     FreeLinks* l = links(h);
     if (l->prev) links(l->prev)->next = l->next;
     else free_head_ = l->next;
@@ -41,9 +74,26 @@ void BasicHeap<Fit>::list_remove(Header* h) {
 }
 
 template <class Fit>
+bool BasicHeap<Fit>::list_remove(Header* h) {
+    if (!unlinkable(h)) return mark_corrupt();
+    unlink(h);
+    return true;
+}
+
+// Each node must be in the heap (so reading it stays inside the arena) and the
+// walk may not exceed the number of free blocks (so a cycle cannot hang it).
+// Nothing more is checked per node: a forged link that stays in the heap is
+// harmless to follow, and whichever block is chosen goes through safe
+// unlinking before anything is written. ADR-012 records the measurements and
+// mutation tests behind keeping this per-node check minimal.
+template <class Fit>
 Header* BasicHeap<Fit>::find_fit(std::size_t need) {
     ++stats_.mallocs;
-    return Fit::find(free_head_, need, stats_.search_steps);
+    std::size_t visited = 0;
+    auto valid = [&](Header* h) { return ++visited <= stats_.free_blocks && in_heap(h) && !is_alloc(h); };
+    const FitResult r = Fit::find(free_head_, need, stats_.search_steps, valid);
+    if (r.corrupt) mark_corrupt();
+    return r.block;
 }
 
 // Turns the space [h, h + total) into an allocated block of `need` bytes and
@@ -70,26 +120,41 @@ void BasicHeap<Fit>::place(Header* h, std::size_t total, std::size_t need) {
 // alloc bit is cleared first so a stale header absorbed into the predecessor
 // still reads as free (immediate double free stays detectable). The epilogue
 // reads as allocated and the first block claims an allocated predecessor, so
-// neither direction needs a boundary check.
+// neither direction needs a boundary check. Both neighbours are validated
+// before anything is modified (ADR-012); returns false on corruption.
 template <class Fit>
-void BasicHeap<Fit>::release(Header* h) {
+bool BasicHeap<Fit>::release(Header* h) {
+    Header* next = next_block(h);
+    const bool merge_next = !is_alloc(next);
+    Header* prev = nullptr;
+    if (!prev_alloc(h)) {
+        // The predecessor's footer lives in its payload, so it may have been
+        // overwritten; bound it before using it to compute an address.
+        const std::size_t prev_size = (h - 1)->word;
+        const auto room = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(h) - first_);
+        if (prev_size < kMinBlock || prev_size % kAlign != 0 || prev_size > room) return mark_corrupt();
+        prev = prev_block(h);
+        if (block_size(prev) != prev_size || !unlinkable(prev)) return mark_corrupt();
+    }
+    if (merge_next && !unlinkable(next)) return mark_corrupt();
+
     h->word &= ~kAllocBit;
     Header* merged = h;
     std::size_t total = block_size(h);
-    Header* next = next_block(h);
-    if (!is_alloc(next)) {
-        list_remove(next);
+    if (merge_next) {
+        unlink(next);
         total += block_size(next);
     }
-    if (!prev_alloc(h)) {
-        merged = prev_block(h);
-        list_remove(merged);
-        total += block_size(merged);
+    if (prev) {
+        unlink(prev);
+        total += block_size(prev);
+        merged = prev;
     }
     merged->word = total | (merged->word & kPrevAllocBit);
     write_footer(merged);
     next_block(merged)->word &= ~kPrevAllocBit;
     list_push(merged);
+    return true;
 }
 
 template <class Fit>
@@ -102,12 +167,11 @@ void BasicHeap<Fit>::note_extent(Header* h) {
 
 template <class Fit>
 void* BasicHeap<Fit>::malloc(std::size_t n) {
-    if (arena_.base() == nullptr || n > arena_.size()) return nullptr;  // also guards overflow
+    if (corrupt_ || arena_.base() == nullptr || n > arena_.size()) return nullptr;  // also guards overflow
     const std::size_t need = block_size_for(n);
 
     Header* h = find_fit(need);
-    if (!h) return nullptr;
-    list_remove(h);
+    if (!h || !list_remove(h)) return nullptr;
     place(h, block_size(h), need);
 
     stats_.bytes_in_use += block_size(h);
@@ -135,19 +199,22 @@ FreeStatus BasicHeap<Fit>::validate(void* p) const {
 template <class Fit>
 FreeStatus BasicHeap<Fit>::free(void* p) {
     if (p == nullptr) return FreeStatus::Ok;
+    if (corrupt_) return FreeStatus::HeapCorrupted;
     const FreeStatus st = validate(p);
     if (st != FreeStatus::Ok) return st;
 
     Header* h = header_of(p);
-    stats_.bytes_in_use -= block_size(h);
+    const std::size_t sz = block_size(h);
+    if (!release(h)) return FreeStatus::HeapCorrupted;
+    stats_.bytes_in_use -= sz;
     --stats_.live_blocks;
-    release(h);
     return FreeStatus::Ok;
 }
 
 template <class Fit>
 void* BasicHeap<Fit>::realloc(void* p, std::size_t n, FreeStatus* status) {
-    if (status) *status = FreeStatus::Ok;
+    if (status) *status = corrupt_ ? FreeStatus::HeapCorrupted : FreeStatus::Ok;
+    if (corrupt_) return nullptr;
     if (p == nullptr) return malloc(n);
     const FreeStatus st = validate(p);
     if (status) *status = st;
@@ -165,8 +232,11 @@ void* BasicHeap<Fit>::realloc(void* p, std::size_t n, FreeStatus* status) {
             h->word = need | kAllocBit | (h->word & kPrevAllocBit);
             Header* rest = next_block(h);
             rest->word = (have - need) | kPrevAllocBit;
+            if (!release(rest)) {
+                if (status) *status = FreeStatus::HeapCorrupted;
+                return nullptr;
+            }
             stats_.bytes_in_use -= have - need;
-            release(rest);
         }
         ++stats_.realloc_in_place;
         return p;
@@ -175,7 +245,10 @@ void* BasicHeap<Fit>::realloc(void* p, std::size_t n, FreeStatus* status) {
     // Grow in place by absorbing a free successor that is large enough.
     Header* next = next_block(h);
     if (!is_alloc(next) && have + block_size(next) >= need) {
-        list_remove(next);
+        if (!list_remove(next)) {
+            if (status) *status = FreeStatus::HeapCorrupted;
+            return nullptr;
+        }
         place(h, have + block_size(next), need);
         stats_.bytes_in_use += block_size(h) - have;
         note_extent(h);
@@ -185,7 +258,10 @@ void* BasicHeap<Fit>::realloc(void* p, std::size_t n, FreeStatus* status) {
 
     // Move. Allocate before freeing so a failure leaves p intact.
     void* q = malloc(n);
-    if (!q) return nullptr;
+    if (!q) {
+        if (status && corrupt_) *status = FreeStatus::HeapCorrupted;
+        return nullptr;
+    }
     const std::size_t copy = have - kHeaderSize;  // < n, since need > have
     std::memcpy(q, p, copy);
     free(p);
@@ -210,6 +286,7 @@ bool BasicHeap<Fit>::check(const char** why) const {
         return false;
     };
     if (arena_.base() == nullptr) return fail("heap not initialised");
+    if (corrupt_) return fail("heap marked corrupted (metadata overwritten)");
     const Header* epi = reinterpret_cast<const Header*>(epilogue_);
     if ((epi->word & ~kPrevAllocBit) != kAllocBit) return fail("epilogue header corrupted");
 
@@ -257,7 +334,9 @@ bool BasicHeap<Fit>::check(const char** why) const {
 template <class Fit>
 FreeSummary BasicHeap<Fit>::free_summary() const {
     FreeSummary s;
-    for (Header* h = free_head_; h; h = links(h)->next) {
+    // Bounded and validated like find_fit, so it is safe after corruption.
+    for (Header* h = free_head_; h && s.count < stats_.free_blocks && plausible_free(h);
+         h = links(h)->next) {
         const std::size_t sz = block_size(h);
         ++s.count;
         s.bytes += sz;
