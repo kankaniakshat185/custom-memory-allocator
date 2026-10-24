@@ -15,4 +15,16 @@ Rationale and the full invariant list: [ADR-004](adr/004-verification-strategy.m
 
 Per-phase additions: Phase 2 split tests (done, `test_split.cpp`); Phase 3 coalescing (done, `test_coalesce.cpp`, plus the stress tests now require one free block after freeing everything); Phase 4 realloc/calloc (done, `test_realloc.cpp`, realloc stress configurations, STL integration); Phase 6 the same suites run against both fit policies (done), plus `test_fit_policy.cpp` for policy-specific choices and search-step counts. ADR-012 adds `test_hardening.cpp`: each kind of metadata overwrite through a dangling pointer, plus a use-after-free fuzz test whose real assertion is "no crash, no hang".
 
+Coverage (clang source-based):
+
+```sh
+cmake -S . -B build-cov -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
+cmake --build build-cov -j --target myalloc_tests myalloc_tests_bestfit
+for b in myalloc_tests myalloc_tests_bestfit; do LLVM_PROFILE_FILE="cov-$b-%p.profraw" ./build-cov/$b; done
+xcrun llvm-profdata merge -sparse cov-*.profraw -o cov.profdata
+xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_tests_bestfit -instr-profile=cov.profdata src/ include/
+```
+
+Both test binaries must also pass when run directly (not only via `ctest`, which isolates every test in its own process): tests that corrupt the process-wide heap must do so inside the death-test child.
+
 Sanitizers: UBSan is on in test builds. ASan + UBSan: `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_ASAN=ON -DMYALLOC_UBSAN=ON` (needs Xcode's clang; see [environment.md](environment.md)). `check()` remains the primary guard against in-arena corruption, which ASan cannot see.

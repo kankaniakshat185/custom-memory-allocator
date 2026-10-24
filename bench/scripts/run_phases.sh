@@ -22,10 +22,10 @@ first=1
 # PHASES selects a subset, e.g. PHASES="phase3 phase4". Phase 2 is excluded by
 # default: without coalescing its first-fit search makes a 1M-op workload run
 # for hours (ADR-008).
-# "current" builds the working tree. ALLOCS selects allocators (default: heap).
+# "worktree" builds the working tree (named so it never collides with run_all.sh's "current" label). ALLOCS selects allocators (default: heap).
 phases=${PHASES:-"phase1 phase3 phase4"}
 allocs=${ALLOCS:-heap}
-for spec in phase1:9baf140 phase2:4c8d98e phase3:0ad7359 phase4:62ae343 phase6:128bcc3 current:WORKTREE; do
+for spec in phase1:9baf140 phase2:4c8d98e phase3:0ad7359 phase4:62ae343 phase6:128bcc3 worktree:WORKTREE; do
     case " $phases " in *" ${spec%%:*} "*) ;; *) continue ;; esac
     label=${spec%%:*}
     commit=${spec##*:}

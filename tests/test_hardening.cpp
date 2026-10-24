@@ -212,10 +212,17 @@ TEST(HardeningFuzz, RandomUafWritesNeverCrashOrHang) {
 }
 
 TEST(HardeningApi, CApiAbortsWithDiagnosticInsteadOfCrashing) {
-    void* a = my_malloc(100);
-    void* guard = my_malloc(16);
-    (void)guard;
-    my_free(a);
-    uaf_write(a, 0, 0x4141414141414141ull);
-    EXPECT_DEATH(my_malloc(5000), "my_malloc: heap corruption detected");
+    // The whole sequence runs in the death-test child, so the shared
+    // process-wide heap of this test binary is never corrupted.
+    EXPECT_DEATH(
+        {
+            void* a = my_malloc(100);
+            void* guard = my_malloc(16);
+            (void)guard;
+            my_free(a);
+            uaf_write(a, 0, 0x4141414141414141ull);
+            my_malloc(5000);
+        },
+        "my_malloc: heap corruption detected");
+    EXPECT_FALSE(myalloc::default_heap().corrupted());
 }

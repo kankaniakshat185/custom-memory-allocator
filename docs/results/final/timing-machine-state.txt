@@ -1,0 +1,11 @@
+final comparison started 2026-10-25 02:00:53 from the Claude Code session
+tree: 997d456 + dead-code removal (block.h const footer overload) + death-test isolation fix; allocator behaviour identical to 4276082
+ 2:00  up  3:02, 2 users, load averages: 5.18 4.15 3.50
+ %CPU COMM
+ 12.8 /System/Library/PrivateFrameworks/EcosystemAnalytics.framework/Support/ecosystemanal
+ 12.1 /System/Library/PrivateFrameworks/Ecosystem.framework/Support/ecosystemd
+ 11.0 /Users/akshatkankani/.vscode/extensions/anthropic.claude-code-2.1.310-darwin-arm64/r
+phases done 02:01:38;  2:01  up  3:03, 2 users, load averages: 4.06 3.98 3.47
+finished 02:02:00;  2:02  up  3:03, 2 users, load averages: 5.61 4.33 3.61
+phases re-run (label fix + phase4 rows noisy) started 02:02:16;  2:02  up  3:03, 2 users, load averages: 4.66 4.19 3.57
+phases re-run done 02:03:01;  2:03  up  3:04, 2 users, load averages: 3.79 4.00 3.53
