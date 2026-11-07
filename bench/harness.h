@@ -9,8 +9,17 @@ namespace bench {
 
 // Monotonic, not affected by sleep or NTP. On Apple Silicon the underlying
 // counter ticks at 24 MHz (~41.7 ns), so only batches of operations are
-// timed, never single calls (ADR-008).
-inline std::uint64_t now_ns() { return clock_gettime_nsec_np(CLOCK_UPTIME_RAW); }
+// timed, never single calls (ADR-008). The Linux branch exists so the
+// harness builds in CI; all published numbers are from macOS.
+inline std::uint64_t now_ns() {
+#ifdef __APPLE__
+    return clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
+#else
+    timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return static_cast<std::uint64_t>(ts.tv_sec) * 1000000000u + static_cast<std::uint64_t>(ts.tv_nsec);
+#endif
+}
 
 inline double percentile(std::vector<double> v, double p) {
     if (v.empty()) return 0.0;

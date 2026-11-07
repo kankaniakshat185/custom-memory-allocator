@@ -1,0 +1,110 @@
+# CI for the allocator. Every job builds and runs both test binaries
+# (first-fit and best-fit as the default policy), so every test runs under both.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-ubsan:
+    name: macOS · Debug + UBSan
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_UBSAN=ON
+      - name: Build
+        run: cmake --build build-test -j 4
+      - name: Test (198 runs)
+        run: ctest --test-dir build-test --output-on-failure -j 4
+      - name: Test binaries also pass when run directly (not isolated per test)
+        run: ./build-test/myalloc_tests && ./build-test/myalloc_tests_bestfit
+
+  macos-asan:
+    name: macOS · Debug + ASan + UBSan
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_ASAN=ON -DMYALLOC_UBSAN=ON
+      - name: Build
+        run: cmake --build build-asan -j 4
+      - name: Test
+        run: ctest --test-dir build-asan --output-on-failure -j 4
+
+  macos-release:
+    name: macOS · Release + footprint determinism
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j 4
+      - name: Binaries are native arm64 (not x86_64 under Rosetta)
+        run: |
+          file build/bench_timing build/footprint_probe
+          ! file build/bench_timing build/footprint_probe | grep -q x86_64
+      - name: Footprint probe matches committed results byte for byte
+        run: bench/scripts/check_footprint.sh build
+      - name: Benchmark harness smoke run (1 rep; timings on CI runners are not meaningful)
+        run: env -u MallocNanoZone ./build/bench_timing --reps 1 --alloc system,heap,heap_bestfit
+      - name: Free-list probe smoke run
+        run: ./build/freelist_length app_like
+
+  linux:
+    name: Linux · ${{ matrix.cxx }} · ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cxx: g++
+            name: Debug + UBSan
+            flags: -DMYALLOC_UBSAN=ON
+          - cxx: clang++
+            name: Debug + ASan + UBSan
+            flags: -DMYALLOC_ASAN=ON -DMYALLOC_UBSAN=ON
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} ${{ matrix.flags }}
+      - name: Build (allocator, tests and benchmark tools)
+        run: cmake --build build-test -j 4
+      - name: Test
+        run: ctest --test-dir build-test --output-on-failure -j 4
+      - name: Footprint probe matches committed results (Release build)
+        run: |
+          cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          cmake --build build-rel -j 4 --target footprint_probe
+          bench/scripts/check_footprint.sh build-rel
+
+  coverage:
+    name: macOS · Coverage
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build-cov -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
+      - name: Build
+        run: cmake --build build-cov -j 4 --target myalloc_tests myalloc_tests_bestfit
+      - name: Run tests with profiling
+        run: |
+          for b in myalloc_tests myalloc_tests_bestfit; do
+            LLVM_PROFILE_FILE="cov-$b-%p.profraw" ./build-cov/$b
+          done
+      - name: Report
+        run: |
+          xcrun llvm-profdata merge -sparse cov-*.profraw -o cov.profdata
+          xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_tests_bestfit \
+            -instr-profile=cov.profdata src/ include/ | tee coverage.txt
+          { echo '### Coverage'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.txt

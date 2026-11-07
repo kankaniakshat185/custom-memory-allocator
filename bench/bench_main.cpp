@@ -10,7 +10,9 @@
 //   allocators: system, heap, heap_naive_realloc, heap_growonly_realloc,
 //               heap_bestfit (trees with fit policies, ADR-009)
 //   MallocNanoZone=0 in the environment relabels "system" as "system_nano_off".
+#ifdef __APPLE__
 #include <sys/sysctl.h>
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -215,10 +217,14 @@ std::vector<RunResult> run_system(const Trace& t, int reps) {
 // True if this process is being translated by Rosetta 2. Timing an x86_64
 // binary on Apple Silicon measures the translator, not the allocator.
 bool under_rosetta() {
+#ifdef __APPLE__
     int translated = 0;
     std::size_t len = sizeof(translated);
     if (sysctlbyname("sysctl.proc_translated", &translated, &len, nullptr, 0) != 0) return false;
     return translated == 1;
+#else
+    return false;
+#endif
 }
 
 }  // namespace

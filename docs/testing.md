@@ -27,4 +27,6 @@ xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_test
 
 Both test binaries must also pass when run directly (not only via `ctest`, which isolates every test in its own process): tests that corrupt the process-wide heap must do so inside the death-test child.
 
+CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) runs on every push: both test binaries under UBSan and under ASan + UBSan on macOS and Linux (GCC, Clang); both binaries run directly as well as through `ctest`; the footprint-determinism check `bench/scripts/check_footprint.sh` (probe output must match the committed reference CSVs byte for byte, on both platforms); a benchmark-harness smoke run; and the coverage report.
+
 Sanitizers: UBSan is on in test builds. ASan + UBSan: `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_ASAN=ON -DMYALLOC_UBSAN=ON` (needs Xcode's clang; see [environment.md](environment.md)). `check()` remains the primary guard against in-arena corruption, which ASan cannot see.

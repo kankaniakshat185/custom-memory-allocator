@@ -176,13 +176,13 @@ Added 2026-11-07, after Phases 0–8 met every Tier 1 exit criterion (§7). Orde
 
 ### Phase 10: CI pipeline (≈ 0.5–1 d)
 Before the big refactors, so it catches regressions during them.
-- [ ] GitHub Actions job: Debug + UBSan, both test binaries (first-fit and best-fit)
-- [ ] ASan + UBSan job
-- [ ] Release build + footprint-probe determinism check (output must match the committed CSVs)
-- [ ] Linux build + tests job (checks the "POSIX-portable" claim; benchmark-only macOS calls guarded)
-- [ ] Coverage job (`llvm-cov` report as an artifact)
-- [ ] Optional: `.clang-format` + blocking format check (one reformat commit)
-- [ ] README: update the CI row and the Code Quality section
+- [x] GitHub Actions job: Debug + UBSan, both test binaries (first-fit and best-fit)
+- [x] ASan + UBSan job
+- [x] Release build + footprint-probe determinism check (output must match the committed CSVs)
+- [x] Linux build + tests job (checks the "POSIX-portable" claim; benchmark-only macOS calls guarded)
+- [x] Coverage job (`llvm-cov` report as an artifact)
+- [ ] Optional: `.clang-format` + blocking format check (one reformat commit). *Not done yet: needs your call on adopting a format style.*
+- [x] README: update the CI row and the Code Quality section
 
 ### Phase 11: Plotting script (≈ 0.5 d)
 Before the new features, so every later ADR gets charts.

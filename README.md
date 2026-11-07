@@ -1,5 +1,7 @@
 <h1 align="center">Custom Memory Allocator</h1>
 
+<p align="center"><a href="https://github.com/kankaniakshat185/custom-memory-allocator/actions/workflows/ci.yml"><img src="https://github.com/kankaniakshat185/custom-memory-allocator/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
+
 A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_realloc` and `my_calloc` on one `mmap`'d arena. It uses an explicit free list, block splitting, O(1) boundary-tag coalescing, first-fit and best-fit policies chosen at compile time, and hardening against use-after-free writes. Single-threaded by design (see Limitations & Non-Goals below). Every performance claim here rests on three things:
 - a heap invariant checker that passes after every operation of the stress tests;
 - deterministic footprint measurements;
@@ -23,6 +25,7 @@ A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_reallo
 *   **Strict checks at the API boundary.** Double frees, pointers outside the arena, misaligned pointers and requests too large for the arena (including `calloc` overflow) are rejected. Bad frees abort with a named diagnostic; oversized requests return `NULL`.
 *   **198 test runs.** 99 tests, built twice (once per fit policy). They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan. The allocator core has 99.7% line and 100% function coverage.
 *   **The checks are themselves tested.** 11 deliberate mutations (an invariant, a merge, a hardening check broken on purpose) each confirmed that a test fails, except one, which showed a hardening check was redundant; it was removed.
+*   **6-job CI pipeline** (GitHub Actions) on every push: sanitized builds and all 198 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
 *   **Measured, not argued.** Deterministic footprint measurements and a trace-replay timing harness compare against the macOS system allocator, with its small-object fast path as a control. Instruments profiles (Time Profiler attributed through inlining, plus the CPU Counters bottleneck breakdown) explain *why* the numbers look the way they do.
 
 ## System Architecture
@@ -59,7 +62,7 @@ header word = block size (multiple of 16) | alloc bit | prev-alloc bit
 | Coverage | clang source-based coverage (`llvm-cov`): allocator core 99.7% lines, 100% functions |
 | Benchmarking | Custom trace-replay wall-clock harness (batch timing, median + IQR over 15 reps) and a deterministic footprint probe |
 | Profiling | Apple Instruments via `xctrace`: Time Profiler (attributed through inlining with `atos -i`) and CPU Counters bottleneck breakdown |
-| CI | None yet: everything runs locally through `bench/scripts/` (see Code Quality) |
+| CI | GitHub Actions, 6 jobs on every push: macOS UBSan; macOS ASan + UBSan; macOS Release with footprint-determinism check and harness smoke run; Linux GCC + UBSan; Linux Clang + ASan + UBSan; coverage report |
 
 ## Engineering Decisions That Mattered
 
@@ -214,11 +217,12 @@ All 198 runs pass under UBSan and under ASan + UBSan.
 *   **Zero concurrency primitives.** No `std::mutex`, `std::thread`, `std::atomic` or `pthread_*` anywhere in `src/`, `include/`, `tests/` or `bench/` (verified by a full-repo grep). It is single-threaded by design, so lock ordering and data races can't occur here.
 *   **Warning-clean** under `-Wall -Wextra -Wpedantic`, in Debug, Release, ASan and coverage builds.
 *   **Dead code removed when found.** Coverage exposed a helper overload left unused after a hardening iteration, and it was deleted.
-*   **Not set up yet:** CI, `clang-format` and `clang-tidy`. Everything above runs locally through CMake and `bench/scripts/`. A CI pipeline like the Matching Engine's is the obvious next step.
+*   **CI on every push** ([`ci.yml`](.github/workflows/ci.yml)): every test under UBSan and under ASan + UBSan on macOS and Linux (GCC 13 and Clang), warnings visible in the logs, a footprint-determinism check that fails if a change alters any placement decision, and coverage published as a job summary.
+*   **Not set up yet:** `clang-format` and `clang-tidy`.
 
 ## Local Development Initialization
 
-The project fetches GoogleTest automatically via CMake `FetchContent` on first configure (network needed once). The allocator itself has no dependencies beyond POSIX `mmap`. Developed on macOS (Xcode clang); on Apple Silicon CMake forces native arm64 builds.
+The project fetches GoogleTest automatically via CMake `FetchContent` on first configure (network needed once). The allocator itself has no dependencies beyond POSIX `mmap`. Developed on macOS (Xcode clang); on Apple Silicon CMake forces native arm64 builds. It also builds warning-free and passes all tests on Linux with GCC 13 and Clang 18 (checked locally in an Ubuntu 24.04 arm64 container; CI runs the same on x86_64). All published benchmark numbers are from macOS.
 
 ```bash
 # Correctness: 99 tests x 2 fit policies, with UBSan
