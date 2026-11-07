@@ -1,5 +1,6 @@
 #pragma once
 #include <stddef.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,6 +27,30 @@ void* my_realloc(void* p, size_t n);
 // Zeroed array of count * size bytes; NULL if the product overflows or the
 // arena is exhausted.
 void* my_calloc(size_t count, size_t size);
+
+// ---- Allocation tracking (ADR-013) ----------------------------------------
+// Sizes are block-based: the allocator does not store requested sizes, so
+// "payload" bytes are what callers can use (>= what they asked for).
+typedef struct my_alloc_stats_t {
+    size_t arena_bytes;        // bytes the heap manages (arena minus sentinels)
+    size_t bytes_in_use;       // allocated blocks, including their 8-byte headers
+    size_t payload_in_use;     // usable bytes in allocated blocks
+    size_t peak_bytes_in_use;  // high-water of bytes_in_use
+    size_t live_blocks;        // allocations not yet freed
+    size_t free_bytes;         // arena_bytes - bytes_in_use
+    size_t free_blocks;        // separate free blocks (fragmentation indicator)
+    size_t high_water;         // highest arena offset ever handed out
+    int corrupted;             // nonzero once metadata corruption was detected
+} my_alloc_stats_t;
+
+// Fills *out in O(1) from counters the heap maintains anyway.
+void my_alloc_stats(my_alloc_stats_t* out);
+
+// Writes every live block (address, usable size) in address order plus
+// totals to out, and returns the number of live blocks. O(blocks).
+// Setting MYALLOC_LEAK_REPORT=1 in the environment prints this report to
+// stderr at process exit when blocks are still live.
+size_t my_report_leaks(FILE* out);
 
 #ifdef __cplusplus
 }

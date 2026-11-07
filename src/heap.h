@@ -98,6 +98,21 @@ public:
     // Walks the free list (O(free blocks)); for tests and footprint probes.
     FreeSummary free_summary() const;
 
+    // Calls f(payload, usable_bytes) for every allocated block in address order
+    // (ADR-013). Reads headers only; stops at the first implausible header and
+    // returns false, so it is safe on a damaged heap. O(blocks).
+    template <class F>
+    bool for_each_live(F&& f) const {
+        for (std::uint8_t* p = first_; p && p < epilogue_;) {
+            auto* h = reinterpret_cast<Header*>(p);
+            const std::size_t sz = block_size(h);
+            if (sz < kMinBlock || sz > static_cast<std::size_t>(epilogue_ - p)) return false;
+            if (is_alloc(h)) f(payload(h), sz - kHeaderSize);
+            p += sz;
+        }
+        return true;
+    }
+
     const HeapStats& stats() const { return stats_; }
     const Arena& arena() const { return arena_; }
     // Sticky: set when free-list metadata fails validation (ADR-012).

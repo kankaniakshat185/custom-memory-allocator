@@ -190,10 +190,10 @@ Before the new features, so every later ADR gets charts.
 - [x] Charts in `docs/results/` and linked from the README
 
 ### Phase 12: Allocation tracking / leak report, Tier 2 (≈ 0.5 d), ADR-013
-- [ ] C API: `my_alloc_stats()` (bytes outstanding, peak, live blocks, free blocks, high-water)
-- [ ] `my_report_leaks(FILE*)`: walks the heap and lists live blocks (address, size) plus totals
-- [ ] Unit and integration tests (leak reported, then zero after freeing; peak tracking)
-- [ ] ADR-013 + README
+- [x] C API: `my_alloc_stats()` (bytes outstanding, peak, live blocks, free blocks, high-water)
+- [x] `my_report_leaks(FILE*)`: walks the heap and lists live blocks (address, size) plus totals
+- [x] Unit and integration tests (leak reported, then zero after freeing; peak tracking)
+- [x] ADR-013 + README
 
 ### Phase 13: Segregated free lists (≈ 1.5–2 d), ADR-011
 - [ ] Size-class design: classes plus a bitmap of non-empty classes; search from the request's class upward

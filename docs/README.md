@@ -24,3 +24,4 @@
 | [010](adr/010-profiling-findings.md) | Profiling findings: where the time goes and why (Time Profiler + CPU Counters) | Accepted |
 | 011 | Segregated size-class free lists | Planned: Phase 13 of the [post-v1.0 task list](plan.md#10-post-v10-task-list-tier-2-and-loose-ends) (motivated by 009 + 010: memory and worst case, not average speed) |
 | [012](adr/012-use-after-free-hardening.md) | Use-after-free hardening: validated links, safe unlinking, fail-stop | Accepted |
+| [013](adr/013-allocation-tracking-and-leak-report.md) | Allocation tracking and leak report: O(1) stats, heap-walk report, opt-in at-exit report | Accepted |
