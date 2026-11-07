@@ -50,6 +50,11 @@ The search followed `a`'s overwritten `next` link to `0x4141414141414141`.
 ## Consequences
 
 ### The design was driven by measurement (cost vs. unhardened `128bcc3`, same-run medians)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../results/charts/hardening-dark.png">
+  <img alt="Line chart of hardening overhead per iteration v1 to v4 for five workload/policy pairs; values in the table below" src="../results/charts/hardening-light.png">
+</picture>
 | Iteration (per-node check in the search) | FF random | FF app-like | BF random | BF app-like | FF adversarial | Runs |
 |---|---|---|---|---|---|---|
 | v1: full check incl. footer | +31%, +33% | +48%, +29% | +71%, +66% | +78%, +78% | +38%, +36% | 2 |

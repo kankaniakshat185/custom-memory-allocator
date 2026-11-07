@@ -25,7 +25,7 @@ A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_reallo
 *   **Strict checks at the API boundary.** Double frees, pointers outside the arena, misaligned pointers and requests too large for the arena (including `calloc` overflow) are rejected. Bad frees abort with a named diagnostic; oversized requests return `NULL`.
 *   **198 test runs.** 99 tests, built twice (once per fit policy). They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan. The allocator core has 99.7% line and 100% function coverage.
 *   **The checks are themselves tested.** 11 deliberate mutations (an invariant, a merge, a hardening check broken on purpose) each confirmed that a test fails, except one, which showed a hardening check was redundant; it was removed.
-*   **6-job CI pipeline** (GitHub Actions) on every push: sanitized builds and all 198 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
+*   **7-job CI pipeline** (GitHub Actions) on every push: a blocking format check, sanitized builds and all 198 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
 *   **Measured, not argued.** Deterministic footprint measurements and a trace-replay timing harness compare against the macOS system allocator, with its small-object fast path as a control. Instruments profiles (Time Profiler attributed through inlining, plus the CPU Counters bottleneck breakdown) explain *why* the numbers look the way they do.
 
 ## System Architecture
@@ -61,8 +61,9 @@ header word = block size (multiple of 16) | alloc bit | prev-alloc bit
 | Sanitizers | AddressSanitizer + UndefinedBehaviorSanitizer (`MYALLOC_ASAN`, `MYALLOC_UBSAN`) |
 | Coverage | clang source-based coverage (`llvm-cov`): allocator core 99.7% lines, 100% functions |
 | Benchmarking | Custom trace-replay wall-clock harness (batch timing, median + IQR over 15 reps) and a deterministic footprint probe |
+| Charts | matplotlib, generated from the committed result files (`bench/scripts/plot.py`), light and dark variants |
 | Profiling | Apple Instruments via `xctrace`: Time Profiler (attributed through inlining with `atos -i`) and CPU Counters bottleneck breakdown |
-| CI | GitHub Actions, 6 jobs on every push: macOS UBSan; macOS ASan + UBSan; macOS Release with footprint-determinism check and harness smoke run; Linux GCC + UBSan; Linux Clang + ASan + UBSan; coverage report |
+| CI | GitHub Actions, 7 jobs on every push: clang-format check; macOS UBSan; macOS ASan + UBSan; macOS Release with footprint-determinism check and harness smoke run; Linux GCC + UBSan; Linux Clang + ASan + UBSan; coverage report |
 
 ## Engineering Decisions That Mattered
 
@@ -158,6 +159,11 @@ All versions measured back-to-back in one invocation of `bench/scripts/run_phase
 | Adversarial | 2,000.5 | untimeable | 685.5 | 681.0 | 632.9 | **640.1** |
 | `realloc` growth | – | – | – | 26.53 | 28.16 | **39.15** (noisy, IQR 10.4%) |
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/results/charts/versions-dark.png">
+  <img alt="Bar charts, one per workload, of ns per operation for Phase 1 to Hardened; values as in the table above" src="docs/results/charts/versions-light.png">
+</picture>
+
 Memory (deterministic footprint probe; utilisation = peak live bytes ÷ arena high-water; OOM = failed allocations):
 
 | Workload | Phase 1 | Phase 2 | Phase 3–Hardened (first-fit) | Best-fit |
@@ -165,6 +171,11 @@ Memory (deterministic footprint probe; utilisation = peak live bytes ÷ arena hi
 | Random sizes | 0.242 | 0.099, **9,293 OOM** | 0.615 | **0.913** |
 | App-like | 0.142, **1,035 OOM** | 0.142, 549 OOM | 0.310 | **0.849** |
 | Phase shift | 0.589 | 0.134, 226 OOM | **0.997** | **0.997** |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/results/charts/footprint-dark.png">
+  <img alt="Bar charts of memory utilisation per version and policy for three workloads; values as in the table above" src="docs/results/charts/footprint-light.png">
+</picture>
 
 **Against the system allocator** (same final session, separate invocation; [data](docs/results/final/timing-summary.md)):
 
@@ -175,9 +186,19 @@ Memory (deterministic footprint probe; utilisation = peak live bytes ÷ arena hi
 | Adversarial | **12.37** | 13.65 | 653.28 | 53× slower |
 | `realloc` growth | 37.51 | 43.39 | **33.93** | 1.11× faster |
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/results/charts/vs-libmalloc-dark.png">
+  <img alt="Bar charts per workload comparing libmalloc, libmalloc with Nano off, first-fit and best-fit; values as in the table above" src="docs/results/charts/vs-libmalloc-light.png">
+</picture>
+
 libmalloc is thread-safe and pays for it, while this allocator is single-threaded. Part of any lead here is that, not better design.
 
 ## Bottlenecks
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/results/charts/bottlenecks-dark.png">
+  <img alt="Stacked bars of CPU pipeline-slot shares (useful, delivery, processing, discarded) per profiled run; values in ADR-010" src="docs/results/charts/bottlenecks-light.png">
+</picture>
 
 What still limits this allocator, as measured, not guessed at ([ADR-010](docs/adr/010-profiling-findings.md)):
 
@@ -218,11 +239,12 @@ All 198 runs pass under UBSan and under ASan + UBSan.
 *   **Warning-clean** under `-Wall -Wextra -Wpedantic`, in Debug, Release, ASan and coverage builds.
 *   **Dead code removed when found.** Coverage exposed a helper overload left unused after a hardening iteration, and it was deleted.
 *   **CI on every push** ([`ci.yml`](.github/workflows/ci.yml)): every test under UBSan and under ASan + UBSan on macOS and Linux (GCC 13 and Clang), warnings visible in the logs, a footprint-determinism check that fails if a change alters any placement decision, and coverage published as a job summary.
-*   **Not set up yet:** `clang-format` and `clang-tidy`.
+*   **`clang-format`, blocking in CI** (pinned 22.1.8, [`.clang-format`](.clang-format)): a formatting diff fails the build. The style was chosen to match the existing code with the least churn.
+*   **Not set up yet:** `clang-tidy`.
 
 ## Local Development Initialization
 
-The project fetches GoogleTest automatically via CMake `FetchContent` on first configure (network needed once). The allocator itself has no dependencies beyond POSIX `mmap`. Developed on macOS (Xcode clang); on Apple Silicon CMake forces native arm64 builds. It also builds warning-free and passes all tests on Linux with GCC 13 and Clang 18 (checked locally in an Ubuntu 24.04 arm64 container; CI runs the same on x86_64). All published benchmark numbers are from macOS.
+The project fetches GoogleTest automatically via CMake `FetchContent` on first configure (network needed once). The allocator itself has no dependencies beyond POSIX `mmap`. Developed on macOS (Xcode clang); on Apple Silicon CMake forces native arm64 builds. It also builds warning-free and passes all tests on Linux with GCC 13 and Clang 18 (Ubuntu 24.04, arm64 locally and x86_64 in CI). All published benchmark numbers are from macOS.
 
 ```bash
 # Correctness: 99 tests x 2 fit policies, with UBSan
@@ -243,6 +265,10 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 # Timing: vs libmalloc (+ Nano-off control), then every phase commit
 bench/scripts/run_final.sh
 python3 bench/scripts/summarize.py        # median + IQR -> docs/results/timing-summary.md
+python3 bench/scripts/plot.py             # charts (light + dark) -> docs/results/charts/, needs matplotlib
+
+# Formatting check (same pinned version as CI: pip install clang-format==22.1.8)
+git ls-files '*.cpp' '*.h' | xargs clang-format --style=file --dry-run -Werror
 
 # Profiling (Instruments): see docs/results/profiles/README.md
 python3 bench/scripts/profile_attrib.py <trace> <binary>

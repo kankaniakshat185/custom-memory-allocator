@@ -43,6 +43,11 @@ Current tree, first-fit, hardened. Share of samples inside `replay()`:
 **Why the search is so cheap** (`freelist-length.txt`): the free list holds 855 (random) to 1,610 (app-like) blocks at a typical malloc, but **LIFO first-fit visits only 1.8–2.0 of them**. The most recently freed block or split remainder at the head almost always fits. ADR-001's worry that search would dominate is wrong for first-fit on typical workloads. It holds for best-fit (57–219 nodes visited per malloc; 92.5% of best-fit's random-workload time is search) and for the adversarial case below.
 
 ### 2. Two different bottleneck regimes (CPU Counters, cycle-weighted)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../results/charts/bottlenecks-dark.png">
+  <img alt="Stacked bars of CPU pipeline-slot shares per profiled run; values in the table below" src="../results/charts/bottlenecks-light.png">
+</picture>
 | Run | Useful | Delivery | Processing (back end / memory) | Discarded (mis-speculation) |
 |---|---|---|---|---|
 | unhardened (Phase 6), app-like | 23.7% | 18.6% | 8.2% | **49.5%** |

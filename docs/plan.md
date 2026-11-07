@@ -181,13 +181,13 @@ Before the big refactors, so it catches regressions during them.
 - [x] Release build + footprint-probe determinism check (output must match the committed CSVs)
 - [x] Linux build + tests job (checks the "POSIX-portable" claim; benchmark-only macOS calls guarded)
 - [x] Coverage job (`llvm-cov` report as an artifact)
-- [ ] Optional: `.clang-format` + blocking format check (one reformat commit). *Not done yet: needs your call on adopting a format style.*
+- [x] Optional: `.clang-format` + blocking format check (one reformat commit): clang-format 22.1.8 pinned; config chosen for least churn (+160/−101 lines)
 - [x] README: update the CI row and the Code Quality section
 
 ### Phase 11: Plotting script (≈ 0.5 d)
 Before the new features, so every later ADR gets charts.
-- [ ] `bench/scripts/plot.py`: timing per version and allocator, footprint per policy
-- [ ] Charts in `docs/results/` and linked from the README
+- [x] `bench/scripts/plot.py`: timing per version and allocator, footprint per policy (plus the hardening and bottleneck charts in ADR-012/010; light + dark)
+- [x] Charts in `docs/results/` and linked from the README
 
 ### Phase 12: Allocation tracking / leak report, Tier 2 (≈ 0.5 d), ADR-013
 - [ ] C API: `my_alloc_stats()` (bytes outstanding, peak, live blocks, free blocks, high-water)
