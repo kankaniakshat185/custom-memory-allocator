@@ -2,7 +2,7 @@
 
 | Path | Contents |
 |---|---|
-| [plan.md](plan.md) | Project plan: scope, design, phases, benchmark methodology, tooling |
+| [plan.md](plan.md) | Project plan: scope, design, phases, benchmark methodology, tooling, and the [post-v1.0 task list](plan.md#10-post-v10-task-list-tier-2-and-loose-ends) |
 | [testing.md](testing.md) | Test strategy and how to run |
 | [environment.md](environment.md) | Machine/toolchain details and known tooling issues |
 | [adr/](adr/) | Architecture decision records (template: [000-template.md](adr/000-template.md)) |
@@ -22,5 +22,5 @@
 | [008](adr/008-benchmark-methodology.md) | Benchmark methodology: trace replay, batch timing, controlled libmalloc baseline | Accepted (native arm64 results) |
 | [009](adr/009-first-fit-vs-best-fit.md) | Fit policy: first-fit vs. best-fit, compile-time | Accepted (first-fit default) |
 | [010](adr/010-profiling-findings.md) | Profiling findings: where the time goes and why (Time Profiler + CPU Counters) | Accepted |
-| 011 | Segregated size-class free lists | Motivated by 009 + 010 (memory and worst case, not average speed); scope decision pending (stretch) |
+| 011 | Segregated size-class free lists | Planned: Phase 13 of the [post-v1.0 task list](plan.md#10-post-v10-task-list-tier-2-and-loose-ends) (motivated by 009 + 010: memory and worst case, not average speed) |
 | [012](adr/012-use-after-free-hardening.md) | Use-after-free hardening: validated links, safe unlinking, fail-stop | Accepted |

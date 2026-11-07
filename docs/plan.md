@@ -1,6 +1,6 @@
 # Custom Memory Allocator — Project Plan (v2, macOS)
 
-Status: draft for refinement. No implementation has started.
+Status: **Tier 1 complete** (Phases 0–8, tagged `v1.0`). This plan is kept as written at the start, with dated resolution notes where things changed, so it shows both the original decisions and their outcomes. The live task list for what's next is [§10](#10-post-v10-task-list-tier-2-and-loose-ends).
 
 ## 0. Environment (measured on the dev machine)
 
@@ -10,13 +10,15 @@ Status: draft for refinement. No implementation has started.
 | OS | macOS 26.5.2 |
 | Page size | 16 KiB (not 4 KiB) |
 | Cache line | 128 B |
-| Compiler | Apple clang 17.0.0, CMake 4.4.2 |
+| Compiler | Apple clang 17.0.0, CMake 4.4.2 (from Phase 5: Xcode's Apple clang 21; see [environment.md](environment.md)) |
 | Baseline allocator | macOS system `malloc` (libmalloc), **not glibc** |
 
 Two things found while checking the machine, which change the plan:
 
 1. **`xctrace` is not installed** (`xcrun --find xctrace` fails), so only the Command Line Tools are present, not full Xcode. Instruments (Time Profiler, CPU Counters, Allocations, os_signpost) is unavailable until Xcode is installed. **Phase 0 task: install Xcode and verify Instruments launches. If that fails, fall back to `sample`/`spindump` and `xcrun xctrace` alternatives (see §5).**
 2. **An ASan+UBSan smoke test (empty `main`) compiled but hung when run** and had to be killed. This may be a machine/setup problem like the one noted in the Matching Engine docs. **Phase 0 task: timebox 30 min to diagnose** (try `-fsanitize=address` alone, then `undefined` alone, check SIP/Rosetta/Homebrew LLVM vs Apple clang). If unresolved, do not block: see §5 on what replaces it.
+
+> **Resolved (Phase 5, 2026-10-24/25).** (1) Xcode was installed; `xctrace` 16.0 works and was used for all profiling (ADR-010), so the §5 fallback was never needed. (2) The ASan hang was specific to the Command Line Tools' clang 17; with Xcode's clang 21, ASan + UBSan run normally and the full suite passes under them. A third issue surfaced later: the installed CMake is an x86_64 binary that built everything for Rosetta. It is now forced to arm64 (ADR-008, [environment.md](environment.md)).
 
 ## 1. Scope guardrails
 
@@ -88,9 +90,9 @@ Also document in every ADR that libmalloc is a multi-zone, size-class allocator 
 | Microarchitectural "why" | Instruments **CPU Counters** (bottleneck breakdown) | Apple Silicon only; check availability on this OS/Xcode in Phase 0. |
 | libmalloc footprint | Instruments **Allocations**, `vmmap`, `heap`, `leaks` CLI tools | Cannot observe `my_malloc` (see §4). |
 | Own-allocator footprint | Allocator debug stats + `task_info` | Built in Phase 4/5. |
-| Fallback if Instruments unavailable | `sample <pid>` / `spindump` for stacks; wall-clock harness + counters for the rest | Weaker for the "why"; call it out in ADR-010 if used. |
+| Fallback if Instruments unavailable | `sample <pid>` / `spindump` for stacks; wall-clock harness + counters for the rest | Weaker for the "why"; call it out in ADR-010 if used. **Not needed:** Instruments became available in Phase 5. |
 | Correctness | GoogleTest + **`heap_check()` after every op in stress tests** | Primary correctness tool, independent of sanitizers. |
-| Sanitizers | ASan/UBSan **if the Phase 0 hang is resolved** | Even when working, ASan cannot see overflows *inside* the mmap'd arena (it doesn't know the arena's block structure), so it covers test code and the allocator's own stack/globals, not heap corruption within the arena. `heap_check()` and guard patterns cover that. If ASan stays broken, use UBSan alone, `MallocScribble`-style fill patterns in debug builds, and Apple Guard Malloc on the *test code* where useful. |
+| Sanitizers | ASan/UBSan **if the Phase 0 hang is resolved** (resolved in Phase 5: ASan + UBSan now run on every test) | Even when working, ASan cannot see overflows *inside* the mmap'd arena (it doesn't know the arena's block structure), so it covers test code and the allocator's own stack/globals, not heap corruption within the arena. `heap_check()` and guard patterns cover that. If ASan stays broken, use UBSan alone, `MallocScribble`-style fill patterns in debug builds, and Apple Guard Malloc on the *test code* where useful. |
 
 Valgrind and `perf` are not used.
 
@@ -147,9 +149,87 @@ Tier 2 order if time remains: debug stats (0.5 d) → `operator new` + `std::vec
 
 All ADRs live in [adr/](adr/); the index with statuses is in [README.md](README.md). The ADR-001 skeleton that was drafted here is now [adr/001-block-tracking-structure.md](adr/001-block-tracking-structure.md).
 
-## 9. Decisions still open
+## 9. Decisions open at the start (all resolved)
 
-1. **Segregated lists:** conditional on profiling evidence (default, as agreed). No budget pre-committed.
-2. **Harness:** custom wall-clock (agreed).
-3. **Instruments availability:** blocked on installing full Xcode; decide in Phase 0 whether the fallback tooling in §5 is acceptable if that fails.
-4. **ASan:** diagnose in Phase 0 (30 min timebox); do not let it block Phase 1.
+1. **Segregated lists:** conditional on profiling evidence (default, as agreed). No budget pre-committed. → **Resolved:** profiling (ADR-010) justified them for memory and worst-case latency, not average speed. Scheduled as Phase 13 (§10), ADR-011.
+2. **Harness:** custom wall-clock (agreed). → **Done:** ADR-008.
+3. **Instruments availability:** blocked on installing full Xcode; decide in Phase 0 whether the fallback tooling in §5 is acceptable if that fails. → **Resolved in Phase 5:** Xcode installed; Instruments used for ADR-010.
+4. **ASan:** diagnose in Phase 0 (30 min timebox); do not let it block Phase 1. → **Resolved in Phase 5:** the toolchain change fixed it. It didn't block Phase 1; UBSan and the invariant checker covered Phases 1–4.
+
+## 10. Post-v1.0 task list (Tier 2 and loose ends)
+
+Added 2026-11-07, after Phases 0–8 met every Tier 1 exit criterion (§7). Ordered for execution. Each phase ships as its own commit (and gets an ADR where it's a design decision), so the project stays complete after every phase. Estimated total: ~8–10 working days. The original 1–2 week window (from 2026-10-24) has passed by the calendar; actual effort through Phase 8 was ~3 days.
+
+**Why this order:**
+- **v1.0 first:** locks in a complete deliverable.
+- **CI and plots next:** CI protects the big refactors, and the plots serve every later ADR.
+- **Cheap Tier 2 item early:** the leak report is also a debugging aid for the refactors after it.
+- **Segregated lists before the slab:** the slab reuses the size classes.
+- **`operator new` after the speed work:** it's the drop-in demo.
+- **Thread safety last:** §1's rule for stretch goals, and the item to cut if time runs out.
+
+### Phase 9: Loose ends → `v1.0` (≈ 0.25 d)
+- [x] Add `LICENSE` (MIT, Akshat Kankani)
+- [x] Update §0 and §9 of this plan: Instruments, ASan and the harness are resolved; add a status line per phase (the §3 table already marks each phase ✅)
+- [x] Update the ADR index entry for 011: "planned, Phase 13" instead of "decision pending"
+- [ ] Commit and `git tag v1.0` (the Tier 1 deliverable)
+
+### Phase 10: CI pipeline (≈ 0.5–1 d)
+Before the big refactors, so it catches regressions during them.
+- [ ] GitHub Actions job: Debug + UBSan, both test binaries (first-fit and best-fit)
+- [ ] ASan + UBSan job
+- [ ] Release build + footprint-probe determinism check (output must match the committed CSVs)
+- [ ] Linux build + tests job (checks the "POSIX-portable" claim; benchmark-only macOS calls guarded)
+- [ ] Coverage job (`llvm-cov` report as an artifact)
+- [ ] Optional: `.clang-format` + blocking format check (one reformat commit)
+- [ ] README: update the CI row and the Code Quality section
+
+### Phase 11: Plotting script (≈ 0.5 d)
+Before the new features, so every later ADR gets charts.
+- [ ] `bench/scripts/plot.py`: timing per version and allocator, footprint per policy
+- [ ] Charts in `docs/results/` and linked from the README
+
+### Phase 12: Allocation tracking / leak report, Tier 2 (≈ 0.5 d), ADR-013
+- [ ] C API: `my_alloc_stats()` (bytes outstanding, peak, live blocks, free blocks, high-water)
+- [ ] `my_report_leaks(FILE*)`: walks the heap and lists live blocks (address, size) plus totals
+- [ ] Unit and integration tests (leak reported, then zero after freeing; peak tracking)
+- [ ] ADR-013 + README
+
+### Phase 13: Segregated free lists (≈ 1.5–2 d), ADR-011
+- [ ] Size-class design: classes plus a bitmap of non-empty classes; search from the request's class upward
+- [ ] Implement it as a third policy (`SegregatedFit`), so first-fit and best-fit stay comparable
+- [ ] Integrate the use-after-free hardening (per-class lists, the same validation)
+- [ ] The whole test suite builds and runs under all three policies; mutation checks
+- [ ] Footprint probe, timing and profile against first-fit, best-fit and libmalloc. Targets: the adversarial gap (53×) and best-fit-level memory without its search cost
+- [ ] Re-check the ADR-007 realloc result under the new policy
+- [ ] Decide the default policy from the data; ADR-011
+
+### Phase 14: Small-object slab fast path, Tier 2 (≈ 2 d), ADR-014
+Builds on Phase 13's size classes.
+- [ ] Fixed-size slabs for small classes (e.g. ≤ 256 B), carved from the arena
+- [ ] Free dispatch: slab vs. general block, identified cheaply and safely
+- [ ] Hardening for slab free lists (use-after-free must still never crash)
+- [ ] Tests, fuzz and mutation checks
+- [ ] Benchmark app-like against libmalloc with Nano on and off. Target: close the measured 1.14× gap; profile to confirm
+- [ ] ADR-014
+
+### Phase 15: `operator new`/`delete` + STL allocator, Tier 2 (≈ 0.5–1 d), ADR-015
+Once the allocator is at its fastest.
+- [ ] Public `myalloc::allocator<T>` header (promoted from the test-only adapter)
+- [ ] Opt-in global `operator new`/`delete` replacement as a separate library target, covering the sized, aligned (`align_val_t`) and `nothrow` variants
+- [ ] A separate test binary for the global replacement, plus a demo using STL containers
+- [ ] ADR-015
+
+### Phase 16: Thread safety, Tier 2 (≈ 1.5–2 d), ADR-016
+Last, as §1 requires. If time runs short, this is the first thing to cut.
+- [ ] Multithreaded benchmark harness (N threads, per-thread traces, throughput and scaling)
+- [ ] Step 1: global-lock wrapper; measure contention and scaling against libmalloc
+- [ ] ThreadSanitizer job (local and CI)
+- [ ] Step 2, decided by the data: per-thread caches or arenas, or stop at the lock and document why
+- [ ] ADR-016
+
+### Phase 17: Final pass → `v2.0` (≈ 0.5 d)
+- [ ] Re-run the final comparison (all versions and policies plus libmalloc), coverage, and the profiles where they changed
+- [ ] Update the README: Features, Comparative Study, Bottlenecks, Limitations, Testing, plus the charts
+- [ ] ADR consistency pass, then refresh the resume bullets with the new results
+- [ ] Commit and `git tag v2.0`
