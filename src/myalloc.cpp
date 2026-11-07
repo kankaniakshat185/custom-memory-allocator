@@ -22,7 +22,8 @@ namespace {
 
 void die_if_bad(myalloc::FreeStatus st, const char* who) {
     switch (st) {
-        case myalloc::FreeStatus::Ok: return;
+        case myalloc::FreeStatus::Ok:
+            return;
         case myalloc::FreeStatus::DoubleFree:
             std::fprintf(stderr, "%s: double free detected\n", who);
             break;
@@ -30,7 +31,8 @@ void die_if_bad(myalloc::FreeStatus st, const char* who) {
             std::fprintf(stderr, "%s: invalid pointer\n", who);
             break;
         case myalloc::FreeStatus::HeapCorrupted:
-            std::fprintf(stderr, "%s: heap corruption detected (free-list metadata overwritten)\n", who);
+            std::fprintf(stderr, "%s: heap corruption detected (free-list metadata overwritten)\n",
+                         who);
             break;
     }
     std::abort();
@@ -38,7 +40,8 @@ void die_if_bad(myalloc::FreeStatus st, const char* who) {
 
 // A NULL caused by detected corruption aborts instead of looking like OOM.
 void* checked(void* p, const char* who) {
-    if (!p && myalloc::default_heap().corrupted()) die_if_bad(myalloc::FreeStatus::HeapCorrupted, who);
+    if (!p && myalloc::default_heap().corrupted())
+        die_if_bad(myalloc::FreeStatus::HeapCorrupted, who);
     return p;
 }
 

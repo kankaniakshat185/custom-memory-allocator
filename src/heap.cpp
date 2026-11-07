@@ -90,7 +90,9 @@ template <class Fit>
 Header* BasicHeap<Fit>::find_fit(std::size_t need) {
     ++stats_.mallocs;
     std::size_t visited = 0;
-    auto valid = [&](Header* h) { return ++visited <= stats_.free_blocks && in_heap(h) && !is_alloc(h); };
+    auto valid = [&](Header* h) {
+        return ++visited <= stats_.free_blocks && in_heap(h) && !is_alloc(h);
+    };
     const FitResult r = Fit::find(free_head_, need, stats_.search_steps, valid);
     if (r.corrupt) mark_corrupt();
     return r.block;
@@ -132,7 +134,8 @@ bool BasicHeap<Fit>::release(Header* h) {
         // overwritten; bound it before using it to compute an address.
         const std::size_t prev_size = (h - 1)->word;
         const auto room = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(h) - first_);
-        if (prev_size < kMinBlock || prev_size % kAlign != 0 || prev_size > room) return mark_corrupt();
+        if (prev_size < kMinBlock || prev_size % kAlign != 0 || prev_size > room)
+            return mark_corrupt();
         prev = prev_block(h);
         if (block_size(prev) != prev_size || !unlinkable(prev)) return mark_corrupt();
     }
@@ -159,15 +162,16 @@ bool BasicHeap<Fit>::release(Header* h) {
 
 template <class Fit>
 void BasicHeap<Fit>::note_extent(Header* h) {
-    const std::size_t end = static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(next_block(h)) -
-                                                     static_cast<std::uint8_t*>(arena_.base()));
+    const std::size_t end = static_cast<std::size_t>(
+        reinterpret_cast<std::uint8_t*>(next_block(h)) - static_cast<std::uint8_t*>(arena_.base()));
     if (end > stats_.high_water) stats_.high_water = end;
     if (stats_.bytes_in_use > stats_.peak_in_use) stats_.peak_in_use = stats_.bytes_in_use;
 }
 
 template <class Fit>
 void* BasicHeap<Fit>::malloc(std::size_t n) {
-    if (corrupt_ || arena_.base() == nullptr || n > arena_.size()) return nullptr;  // also guards overflow
+    if (corrupt_ || arena_.base() == nullptr || n > arena_.size())
+        return nullptr;  // also guards overflow
     const std::size_t need = block_size_for(n);
 
     Header* h = find_fit(need);
@@ -300,7 +304,8 @@ bool BasicHeap<Fit>::check(const char** why) const {
         if (p + sz > epilogue_) return fail("block overruns epilogue");
         if (reinterpret_cast<std::uintptr_t>(payload(h)) % kAlign != 0)
             return fail("payload misaligned");
-        if (prev_alloc(h) != prev_was_alloc) return fail("prev-alloc bit disagrees with predecessor");
+        if (prev_alloc(h) != prev_was_alloc)
+            return fail("prev-alloc bit disagrees with predecessor");
         if (is_alloc(h)) {
             ++walk_alloc;
             in_use += sz;

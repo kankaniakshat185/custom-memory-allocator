@@ -98,7 +98,8 @@ RunResult replay(A& a, const Trace& t) {
             switch (op.kind) {
                 case OpKind::Alloc: {
                     void* p = a.malloc(op.size);
-                    if (p) static_cast<std::uint64_t*>(p)[0] = op.size;  // touch, like a real caller
+                    if (p)
+                        static_cast<std::uint64_t*>(p)[0] = op.size;  // touch, like a real caller
                     else ++r.failures;
                     slot[op.slot] = p;
                     break;
@@ -135,7 +136,8 @@ template <class H>
 void prefault(H& h, std::size_t bytes) {
     auto* base = static_cast<volatile std::uint8_t*>(const_cast<void*>(h.arena().base()));
     const std::size_t ps = myalloc::page_size();
-    for (std::size_t off = 0; off < bytes && off + 64 < h.arena().size(); off += ps) base[off + 64] = 0;
+    for (std::size_t off = 0; off < bytes && off + 64 < h.arena().size(); off += ps)
+        base[off + 64] = 0;
 }
 
 struct Options {
@@ -150,8 +152,10 @@ std::vector<std::string> split(const char* s) {
     std::vector<std::string> out;
     std::string cur;
     for (; *s; ++s) {
-        if (*s == ',') { out.push_back(cur); cur.clear(); }
-        else cur += *s;
+        if (*s == ',') {
+            out.push_back(cur);
+            cur.clear();
+        } else cur += *s;
     }
     if (!cur.empty()) out.push_back(cur);
     return out;
@@ -244,26 +248,35 @@ int main(int argc, char** argv) {
         else if (k == "--alloc") o.allocs = split(argv[i + 1]);
         else if (k == "--workload") o.workloads = split(argv[i + 1]);
         else if (k == "--raw") o.raw = argv[i + 1];
-        else { std::fprintf(stderr, "unknown option %s\n", k.c_str()); return 2; }
+        else {
+            std::fprintf(stderr, "unknown option %s\n", k.c_str());
+            return 2;
+        }
     }
     std::FILE* raw = o.raw.empty() ? nullptr : std::fopen(o.raw.c_str(), "a");
     const char* nano = std::getenv("MallocNanoZone");
-    const std::string system_name = (nano && std::strcmp(nano, "0") == 0) ? "system_nano_off" : "system";
+    const std::string system_name =
+        (nano && std::strcmp(nano, "0") == 0) ? "system_nano_off" : "system";
 
-    std::printf("label,allocator,workload,ops,reps,min_ns,median_ns,max_ns,spread_pct,"
-                "batch_p50_ns,batch_p99_ns,failures_per_rep\n");
+    std::printf(
+        "label,allocator,workload,ops,reps,min_ns,median_ns,max_ns,spread_pct,"
+        "batch_p50_ns,batch_p99_ns,failures_per_rep\n");
     for (const Trace& t : bench::all_traces()) {
         if (!wanted(o.workloads, t.name)) continue;
         for (const std::string& a : o.allocs) {
             if (t.uses_realloc && a != "system" && !kHeapHasRealloc) continue;
-            if (!t.uses_realloc && (a == "heap_naive_realloc" || a == "heap_growonly_realloc")) continue;
+            if (!t.uses_realloc && (a == "heap_naive_realloc" || a == "heap_growonly_realloc"))
+                continue;
             if (a == "system") report(o, system_name, t, run_system(t, o.reps), raw);
             else if (a == "heap") report(o, a, t, run_heap<ReallocMode::Native>(t, o.reps), raw);
-            else if (a == "heap_naive_realloc") report(o, a, t, run_heap<ReallocMode::Naive>(t, o.reps), raw);
-            else if (a == "heap_growonly_realloc") report(o, a, t, run_heap<ReallocMode::GrowOnly>(t, o.reps), raw);
+            else if (a == "heap_naive_realloc")
+                report(o, a, t, run_heap<ReallocMode::Naive>(t, o.reps), raw);
+            else if (a == "heap_growonly_realloc")
+                report(o, a, t, run_heap<ReallocMode::GrowOnly>(t, o.reps), raw);
 #ifdef MYALLOC_HAS_FIT_POLICIES
             else if (a == "heap_bestfit")
-                report(o, a, t, run_heap<ReallocMode::Native, myalloc::BestFitHeap>(t, o.reps), raw);
+                report(o, a, t, run_heap<ReallocMode::Native, myalloc::BestFitHeap>(t, o.reps),
+                       raw);
 #endif
             else std::fprintf(stderr, "unknown allocator %s\n", a.c_str());
         }

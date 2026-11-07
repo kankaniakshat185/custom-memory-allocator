@@ -44,14 +44,17 @@ TEST_F(HeapUnit, FreeNullIsNoop) {
 TEST_F(HeapUnit, BlockSizeRoundingAndMinimum) {
     EXPECT_EQ(myalloc::block_size_for(0), 32u);
     EXPECT_EQ(myalloc::block_size_for(1), 32u);
-    EXPECT_EQ(myalloc::block_size_for(24), 32u);   // 24 + 8 header = 32
+    EXPECT_EQ(myalloc::block_size_for(24), 32u);  // 24 + 8 header = 32
     EXPECT_EQ(myalloc::block_size_for(25), 48u);
     EXPECT_EQ(myalloc::block_size_for(40), 48u);
     EXPECT_EQ(myalloc::block_size_for(41), 64u);
 }
 
 TEST_F(HeapUnit, AllocationsDoNotOverlap) {
-    struct Blk { unsigned char* p; std::size_t n; };
+    struct Blk {
+        unsigned char* p;
+        std::size_t n;
+    };
     std::vector<Blk> blocks;
     for (std::size_t n : {1u, 7u, 16u, 24u, 25u, 100u, 1000u, 33u, 4096u}) {
         auto* p = static_cast<unsigned char*>(h.malloc(n));
@@ -85,7 +88,7 @@ TEST_F(HeapUnit, FirstFitSkipsTooSmallBlocks) {
     void* g2 = h.malloc(16);
     ASSERT_TRUE(small && big && g1 && g2);
     h.free(big);
-    h.free(small);  // list head: small, then big
+    h.free(small);            // list head: small, then big
     void* p = h.malloc(150);  // small can't serve it; big can
     EXPECT_EQ(p, big);
     EXPECT_HEAP_OK(h);

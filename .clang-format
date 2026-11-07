@@ -1,0 +1,14 @@
+# Formatting is enforced in CI with clang-format 22.1.8 (pinned; see
+# .github/workflows/ci.yml). Chosen to match the existing code with the least
+# churn: of four candidate configs, this one changed the fewest lines when
+# adopted (+160/-101 of ~3,000).
+BasedOnStyle: Google
+IndentWidth: 4
+ColumnLimit: 100
+AccessModifierOffset: -4
+DerivePointerAlignment: false
+PointerAlignment: Left
+IncludeBlocks: Preserve
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty

@@ -63,7 +63,7 @@ TEST_F(Realloc, ShrinkTailCoalescesWithFreeSuccessor) {
 }
 
 TEST_F(Realloc, SmallShrinkKeepsWholeBlock) {
-    void* p = h.malloc(100);  // 112 B
+    void* p = h.malloc(100);         // 112 B
     EXPECT_EQ(h.realloc(p, 90), p);  // 112 - 112 = 0, nothing to split
     EXPECT_EQ(h.realloc(p, 80), p);  // needs 96 B; 16 B remainder < kMinBlock
     EXPECT_EQ(block_size(header_of(p)), block_size_for(100));
@@ -211,7 +211,7 @@ TEST_F(Calloc, ReturnsZeroedMemoryEvenWhenReusingDirtyBlock) {
     fill(dirty, 500, 0xFF);
     h.free(dirty);
     void* p = h.calloc(50, 10);
-    EXPECT_EQ(p, dirty);  // same block reused...
+    EXPECT_EQ(p, dirty);                // same block reused...
     EXPECT_TRUE(all_equal(p, 500, 0));  // ...but zeroed
     EXPECT_HEAP_OK(h);
     (void)guard;

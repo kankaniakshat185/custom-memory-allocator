@@ -36,9 +36,13 @@ struct MyAlloc {
     }
     void deallocate(T* p, std::size_t) { my_free(p); }
     template <class U>
-    bool operator==(const MyAlloc<U>&) const { return true; }
+    bool operator==(const MyAlloc<U>&) const {
+        return true;
+    }
     template <class U>
-    bool operator!=(const MyAlloc<U>&) const { return false; }
+    bool operator!=(const MyAlloc<U>&) const {
+        return false;
+    }
 };
 }  // namespace
 

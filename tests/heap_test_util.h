@@ -8,9 +8,9 @@
 #include "heap.h"
 
 // Fails the test with the checker's message if any heap invariant is broken.
-#define EXPECT_HEAP_OK(heap)                                  \
-    do {                                                      \
-        const char* why_ = nullptr;                           \
+#define EXPECT_HEAP_OK(heap)                                                       \
+    do {                                                                           \
+        const char* why_ = nullptr;                                                \
         EXPECT_TRUE((heap).check(&why_)) << "heap_check: " << (why_ ? why_ : "?"); \
     } while (0)
 
@@ -28,4 +28,3 @@ constexpr bool kBestFit = true;
 #else
 constexpr bool kBestFit = false;
 #endif
-

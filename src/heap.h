@@ -12,16 +12,16 @@ namespace myalloc {
 enum class FreeStatus { Ok, InvalidPointer, DoubleFree, HeapCorrupted };
 
 struct HeapStats {
-    std::size_t bytes_in_use = 0;   // sum of allocated block sizes (incl. headers)
+    std::size_t bytes_in_use = 0;  // sum of allocated block sizes (incl. headers)
     std::size_t peak_in_use = 0;
     std::size_t live_blocks = 0;
-    std::size_t high_water = 0;     // highest arena offset ever handed out (footprint proxy)
+    std::size_t high_water = 0;  // highest arena offset ever handed out (footprint proxy)
     std::size_t free_blocks = 0;
     std::size_t realloc_in_place = 0;  // served without moving (shrink, no-op, or grow into next)
     std::size_t realloc_moved = 0;     // malloc + copy + free
     std::size_t realloc_bytes_copied = 0;
-    std::size_t mallocs = 0;        // calls that searched the free list
-    std::size_t search_steps = 0;   // free-list nodes visited by those searches
+    std::size_t mallocs = 0;       // calls that searched the free list
+    std::size_t search_steps = 0;  // free-list nodes visited by those searches
 };
 
 struct FreeSummary {

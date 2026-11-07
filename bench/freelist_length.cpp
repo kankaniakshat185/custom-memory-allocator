@@ -46,8 +46,9 @@ int run(const char* want) {
             std::printf(" %.0f", m / static_cast<double>(b - a));
         }
 #ifdef MYALLOC_HAS_FIT_POLICIES
-        std::printf(" | nodes visited per malloc: %.1f",
-                    static_cast<double>(h.stats().search_steps) / static_cast<double>(h.stats().mallocs));
+        std::printf(
+            " | nodes visited per malloc: %.1f",
+            static_cast<double>(h.stats().search_steps) / static_cast<double>(h.stats().mallocs));
 #endif
         std::printf("\n");
         return 0;

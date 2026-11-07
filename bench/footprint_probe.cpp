@@ -42,7 +42,10 @@ public:
     void alloc(std::size_t n) {
         ++r_.ops;
         void* p = heap_.malloc(n);
-        if (!p) { ++r_.oom; return; }
+        if (!p) {
+            ++r_.oom;
+            return;
+        }
         live_.push_back({p, n});
         req_ += n;
         if (req_ > r_.peak_req) r_.peak_req = req_;
@@ -63,7 +66,8 @@ public:
                     r_.peak_req, s.peak_in_use, s.high_water,
                     r_.peak_req ? double(s.peak_in_use) / double(r_.peak_req) : 0.0,
                     s.high_water ? double(r_.peak_req) / double(s.high_water) : 0.0, f.count,
-                    f.bytes, f.largest, s.mallocs ? double(s.search_steps) / double(s.mallocs) : 0.0);
+                    f.bytes, f.largest,
+                    s.mallocs ? double(s.search_steps) / double(s.mallocs) : 0.0);
     }
 
 private:
@@ -157,7 +161,8 @@ void realloc_growth(Policy policy, std::size_t arena_mib) {
             const std::size_t n = b.n >= 65536 ? 16 : b.n * 2;
             ++calls;
             void* q;
-            const bool move = policy == Policy::Naive || (policy == Policy::GrowOnlyInPlace && n < b.n);
+            const bool move =
+                policy == Policy::Naive || (policy == Policy::GrowOnlyInPlace && n < b.n);
             if (move) {
                 q = h.malloc(n);
                 if (q) {
@@ -170,18 +175,25 @@ void realloc_growth(Policy policy, std::size_t arena_mib) {
             } else {
                 q = h.realloc(b.p, n);
             }
-            if (!q) { ++oom; continue; }
+            if (!q) {
+                ++oom;
+                continue;
+            }
             track(static_cast<std::ptrdiff_t>(n) - static_cast<std::ptrdiff_t>(b.n));
             b = {q, n};
         } else if (r < 70) {
             const std::size_t n = 16 + rng() % 241;
-            if (void* p = h.malloc(n)) { noise.push_back({p, n}); track(static_cast<std::ptrdiff_t>(n)); }
-            else ++oom;
+            if (void* p = h.malloc(n)) {
+                noise.push_back({p, n});
+                track(static_cast<std::ptrdiff_t>(n));
+            } else ++oom;
         } else if (r < 85 && !noise.empty()) {
             drop(noise, rng() % noise.size());
         } else if (r < 92 || bufs.empty()) {
-            if (void* p = h.malloc(16)) { bufs.push_back({p, 16}); track(16); }
-            else ++oom;
+            if (void* p = h.malloc(16)) {
+                bufs.push_back({p, 16});
+                track(16);
+            } else ++oom;
         } else {
             drop(bufs, rng() % bufs.size());
         }
@@ -202,8 +214,9 @@ void realloc_growth(Policy policy, std::size_t arena_mib) {
 template <class H>
 int run(bool realloc_mode) {
     if (realloc_mode) {
-        std::puts("policy,arena_mib,realloc_calls,in_place,moved,bytes_copied,oom,peak_requested,"
-                  "high_water,utilisation,free_blocks_end,largest_free_end,avg_search_steps");
+        std::puts(
+            "policy,arena_mib,realloc_calls,in_place,moved,bytes_copied,oom,peak_requested,"
+            "high_water,utilisation,free_blocks_end,largest_free_end,avg_search_steps");
         for (std::size_t mib : {32, 64}) {
             realloc_growth<H>(Policy::Naive, mib);
             realloc_growth<H>(Policy::InPlace, mib);
@@ -227,5 +240,6 @@ int main(int argc, char** argv) {
         if (std::strcmp(argv[i], "realloc") == 0) realloc_mode = true;
         else if (std::strcmp(argv[i], "--best-fit") == 0) best_fit = true;
     }
-    return best_fit ? run<myalloc::BestFitHeap>(realloc_mode) : run<myalloc::FirstFitHeap>(realloc_mode);
+    return best_fit ? run<myalloc::BestFitHeap>(realloc_mode)
+                    : run<myalloc::FirstFitHeap>(realloc_mode);
 }

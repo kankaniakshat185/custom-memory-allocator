@@ -5,8 +5,8 @@
 # be intentional and re-recorded in an ADR.
 # References: the Phase 6 probe results (ADR-009); ADR-012 verified that the
 # use-after-free hardening left them byte-identical.
-# Observed byte-identical on macOS (libc++, Apple clang) and Linux (libstdc++,
-# GCC 13). The C++ standard does not guarantee identical random distributions
+# Observed byte-identical on macOS arm64 (libc++, Apple clang) and on Linux
+# arm64 and x86_64 (libstdc++; GCC 13 and Clang 18; x86_64 in CI). The C++ standard does not guarantee identical random distributions
 # or libm results across libraries/platforms, so a mismatch on a *new*
 # platform may come from the library rather than the allocator.
 #   bench/scripts/check_footprint.sh [build_dir]

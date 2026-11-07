@@ -41,38 +41,38 @@ TEST_F(Split, BytesAreConservedAcrossSplits) {
 }
 
 TEST_F(Split, LargeFreedBlockServesSmallRequestAndKeepsRemainder) {
-    void* big = h.malloc(1000);           // 1008 B block
-    void* guard = h.malloc(16);           // keeps big from touching the tail remainder
+    void* big = h.malloc(1000);  // 1008 B block
+    void* guard = h.malloc(16);  // keeps big from touching the tail remainder
     ASSERT_TRUE(big && guard);
     ASSERT_EQ(h.free(big), FreeStatus::Ok);
 
-    void* small = h.malloc(16);           // 32 B block, carved from the front of big
+    void* small = h.malloc(16);  // 32 B block, carved from the front of big
     EXPECT_EQ(small, big);
     EXPECT_EQ(h.stats().bytes_in_use, 2 * block_size_for(16));
-    void* next = h.malloc(16);            // served from big's remainder, directly after small
+    void* next = h.malloc(16);  // served from big's remainder, directly after small
     EXPECT_EQ(static_cast<char*>(next), static_cast<char*>(small) + block_size_for(16));
     EXPECT_HEAP_OK(h);
 }
 
 TEST_F(Split, RemainderSmallerThanMinimumIsNotSplit) {
     // 48 B block reused for a 32 B request: remainder 16 < kMinBlock, hand out whole.
-    void* a = h.malloc(40);               // 48 B block
+    void* a = h.malloc(40);  // 48 B block
     void* guard = h.malloc(16);
     ASSERT_TRUE(a && guard);
     h.free(a);
-    void* b = h.malloc(24);               // needs 32 B
+    void* b = h.malloc(24);  // needs 32 B
     EXPECT_EQ(b, a);
     EXPECT_EQ(h.stats().bytes_in_use, block_size_for(40) + block_size_for(16));
     EXPECT_HEAP_OK(h);
 }
 
 TEST_F(Split, RemainderExactlyMinimumIsSplit) {
-    void* a = h.malloc(56);               // 64 B block
+    void* a = h.malloc(56);  // 64 B block
     void* guard = h.malloc(16);
     ASSERT_TRUE(a && guard);
     h.free(a);
     const std::size_t free_before = h.free_summary().count;
-    void* b = h.malloc(24);               // 32 B, remainder 32 == kMinBlock
+    void* b = h.malloc(24);  // 32 B, remainder 32 == kMinBlock
     EXPECT_EQ(b, a);
     EXPECT_EQ(h.stats().bytes_in_use, block_size_for(24) + block_size_for(16));
     EXPECT_EQ(h.free_summary().count, free_before);  // a left the list, its remainder joined
@@ -91,7 +91,7 @@ TEST_F(Split, ExactFitLeavesNoRemainder) {
 }
 
 TEST_F(Split, WholeArenaCanBeAllocatedInOneBlock) {
-    void* p = h.malloc(usable() - 8);     // exactly the initial block
+    void* p = h.malloc(usable() - 8);  // exactly the initial block
     ASSERT_NE(p, nullptr);
     EXPECT_EQ(h.free_summary().count, 0u);
     EXPECT_EQ(h.malloc(0), nullptr);

@@ -23,7 +23,9 @@ TEST(Alignment, SuitableForMaxAlignTypes) {
     void* p = h.malloc(sizeof(max_align_t));
     ASSERT_NE(p, nullptr);
     EXPECT_EQ(reinterpret_cast<std::uintptr_t>(p) % alignof(max_align_t), 0u);
-    struct alignas(16) Vec { double a, b; };
+    struct alignas(16) Vec {
+        double a, b;
+    };
     auto* v = new (h.malloc(sizeof(Vec))) Vec{1.0, 2.0};
     EXPECT_EQ(reinterpret_cast<std::uintptr_t>(v) % alignof(Vec), 0u);
 }

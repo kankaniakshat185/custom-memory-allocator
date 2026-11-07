@@ -59,12 +59,12 @@ TEST_F(Hardening, GarbageNextLinkIsDetectedNotFollowed) {
     // The exact sequence that segfaulted before ADR-012.
     two_holes();
     uaf_write(b, 0, 0x4141414141414141ull);  // b.next
-    EXPECT_EQ(h.malloc(5000), nullptr);       // walk reaches b, b does not fit, b.next is garbage
+    EXPECT_EQ(h.malloc(5000), nullptr);      // walk reaches b, b does not fit, b.next is garbage
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, NextLinkToAllocatedBlockIsDetected) {
-    void* live = h.malloc(40);                // allocated before the holes, so not carved from b
+    void* live = h.malloc(40);  // allocated before the holes, so not carved from b
     two_holes();
     uaf_write(b, 0, addr(myalloc::header_of(live)));
     EXPECT_EQ(h.malloc(5000), nullptr);
@@ -87,39 +87,40 @@ TEST_F(Hardening, MisalignedNextLinkInsideHeapIsDetected) {
 }
 
 TEST_F(Hardening, BrokenBackLinkOfChosenBlockIsDetectedOnUnlink) {
-    two_holes();                              // list: b(112), a(304), tail
-    uaf_write(a, 8, 0x1234);                  // a.prev should be b
-    EXPECT_EQ(h.malloc(200), nullptr);        // search picks a; unlinking a checks a.prev first
+    two_holes();                        // list: b(112), a(304), tail
+    uaf_write(a, 8, 0x1234);            // a.prev should be b
+    EXPECT_EQ(h.malloc(200), nullptr);  // search picks a; unlinking a checks a.prev first
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, BrokenNeighbourLinkIsDetectedOnUnlink) {
-    two_holes();                              // list: b, a, tail
-    uaf_write(a, 8, 0x4242);                  // a.prev should be b
-    EXPECT_EQ(h.malloc(100), nullptr);        // b fits at once; unlinking b rewrites a.prev,
-    expect_corrupted_and_inert();             // so safe unlinking checks it first
+    two_holes();                        // list: b, a, tail
+    uaf_write(a, 8, 0x4242);            // a.prev should be b
+    EXPECT_EQ(h.malloc(100), nullptr);  // b fits at once; unlinking b rewrites a.prev,
+    expect_corrupted_and_inert();       // so safe unlinking checks it first
 }
 
 TEST_F(Hardening, SelfLoopIsDetected) {
     two_holes();
     uaf_write(b, 0, addr(myalloc::header_of(b)));  // b.next = b
-    EXPECT_EQ(h.malloc(5000), nullptr);             // must terminate
+    EXPECT_EQ(h.malloc(5000), nullptr);            // must terminate
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, TwoNodeCycleIsDetected) {
-    two_holes();                                    // list: b, a, tail
-    uaf_write(a, 0, addr(myalloc::header_of(b)));   // a.next = b
-    EXPECT_EQ(h.malloc(5000), nullptr);             // must terminate
+    two_holes();                                   // list: b, a, tail
+    uaf_write(a, 0, addr(myalloc::header_of(b)));  // a.next = b
+    EXPECT_EQ(h.malloc(5000), nullptr);            // must terminate
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, OverwrittenFooterIsDetectedOnBackwardMerge) {
-    for (std::uint64_t bad : {std::uint64_t{0}, std::uint64_t{8}, std::uint64_t{1} << 40, std::uint64_t{64}}) {
+    for (std::uint64_t bad :
+         {std::uint64_t{0}, std::uint64_t{8}, std::uint64_t{1} << 40, std::uint64_t{64}}) {
         Heap hh;
         ASSERT_TRUE(hh.init(1u << 20));
         hh.malloc(16);
-        void* x = hh.malloc(200);                   // 208 B block
+        void* x = hh.malloc(200);  // 208 B block
         void* y = hh.malloc(200);
         hh.malloc(16);
         hh.free(x);
@@ -147,10 +148,10 @@ TEST_F(Hardening, CorruptionDuringReallocIsReported) {
     void* p = h.malloc(100);
     void* q = h.malloc(300);
     h.malloc(16);
-    h.free(q);                                // p's successor is free
-    uaf_write(q, 0, 0x4343);                  // q.next garbage
+    h.free(q);                // p's successor is free
+    uaf_write(q, 0, 0x4343);  // q.next garbage
     FreeStatus st = FreeStatus::Ok;
-    EXPECT_EQ(h.realloc(p, 200, &st), nullptr);   // grow in place would unlink q
+    EXPECT_EQ(h.realloc(p, 200, &st), nullptr);  // grow in place would unlink q
     EXPECT_EQ(st, FreeStatus::HeapCorrupted);
     EXPECT_TRUE(h.corrupted());
 }
@@ -164,7 +165,10 @@ TEST(HardeningFuzz, RandomUafWritesNeverCrashOrHang) {
         Heap h;
         ASSERT_TRUE(h.init(256u << 10));
         std::mt19937 rng(seed);
-        struct Blk { void* p; std::size_t n; };
+        struct Blk {
+            void* p;
+            std::size_t n;
+        };
         std::vector<Blk> live, dead;
         bool stopped = false;
         for (int op = 0; op < 3000 && !stopped; ++op) {
@@ -198,10 +202,10 @@ TEST(HardeningFuzz, RandomUafWritesNeverCrashOrHang) {
             }
             if (h.corrupted()) stopped = true;
         }
-        if (h.corrupted()) ++detected;        // metadata overwrite caught
-        else if (stopped) ++rejected;         // a free/realloc of a pointer whose header was hit
-        else ++completed;                     // writes were harmless
-        (void)h.free_summary();  // must also be safe in whatever state we ended in
+        if (h.corrupted()) ++detected;  // metadata overwrite caught
+        else if (stopped) ++rejected;   // a free/realloc of a pointer whose header was hit
+        else ++completed;               // writes were harmless
+        (void)h.free_summary();         // must also be safe in whatever state we ended in
     }
     // Reaching this line is the real assertion (no crash, no hang). The counts
     // show both outcomes occur, so the test exercises detection, not luck.

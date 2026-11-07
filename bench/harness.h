@@ -17,7 +17,8 @@ inline std::uint64_t now_ns() {
 #else
     timespec ts;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-    return static_cast<std::uint64_t>(ts.tv_sec) * 1000000000u + static_cast<std::uint64_t>(ts.tv_nsec);
+    return static_cast<std::uint64_t>(ts.tv_sec) * 1000000000u +
+           static_cast<std::uint64_t>(ts.tv_nsec);
 #endif
 }
 

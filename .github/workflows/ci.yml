@@ -11,6 +11,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  format:
+    name: Format (clang-format 22.1.8)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the pinned clang-format (must match the version used locally)
+        run: pip install clang-format==22.1.8
+      - name: Check formatting
+        run: git ls-files '*.cpp' '*.h' | xargs clang-format --style=file --dry-run -Werror
+
   macos-ubsan:
     name: macOS · Debug + UBSan
     runs-on: macos-15

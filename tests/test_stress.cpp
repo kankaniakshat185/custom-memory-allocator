@@ -17,7 +17,10 @@ struct Live {
 std::size_t run(unsigned seed, std::size_t arena, std::size_t max_size, int ops,
                 unsigned realloc_pct = 0) {
     myalloc::Heap h;
-    if (!h.init(arena)) { ADD_FAILURE() << "arena init"; return 0; }
+    if (!h.init(arena)) {
+        ADD_FAILURE() << "arena init";
+        return 0;
+    }
     std::mt19937 rng(seed);
     std::vector<Live> live;
     std::size_t oom = 0;
@@ -41,7 +44,10 @@ std::size_t run(unsigned seed, std::size_t arena, std::size_t max_size, int ops,
         } else if (do_alloc) {
             std::size_t n = rng() % max_size;
             auto* p = static_cast<unsigned char*>(h.malloc(n));
-            if (!p) { ++oom; continue; }
+            if (!p) {
+                ++oom;
+                continue;
+            }
             auto tag = static_cast<std::uint8_t>(rng());
             fill(p, n, tag);
             live.push_back({p, n, tag});
@@ -72,8 +78,12 @@ std::size_t run(unsigned seed, std::size_t arena, std::size_t max_size, int ops,
 }
 }  // namespace
 
-TEST(Stress, SmallSizes) { for (unsigned s = 1; s <= 5; ++s) run(s, 1u << 20, 128, 20000); }
-TEST(Stress, MixedSizes) { for (unsigned s = 1; s <= 5; ++s) run(s, 4u << 20, 8192, 10000); }
+TEST(Stress, SmallSizes) {
+    for (unsigned s = 1; s <= 5; ++s) run(s, 1u << 20, 128, 20000);
+}
+TEST(Stress, MixedSizes) {
+    for (unsigned s = 1; s <= 5; ++s) run(s, 4u << 20, 8192, 10000);
+}
 TEST(Stress, TinyArenaConstantOom) {
     std::size_t oom = 0;
     for (unsigned s = 1; s <= 5; ++s) oom += run(s, 64u << 10, 4096, 10000);
