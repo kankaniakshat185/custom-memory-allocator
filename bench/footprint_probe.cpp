@@ -20,6 +20,7 @@
 #include <random>
 #include <vector>
 
+#include "allocator.h"
 #include "heap.h"
 
 namespace {
@@ -233,14 +234,16 @@ int run(bool realloc_mode) {
     return 0;
 }
 
-// Usage: footprint_probe [realloc] [--best-fit | --segregated]
+// Usage: footprint_probe [realloc] [--best-fit | --segregated | --slab]
 int main(int argc, char** argv) {
-    bool realloc_mode = false, best_fit = false, segregated = false;
+    bool realloc_mode = false, best_fit = false, segregated = false, slab = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "realloc") == 0) realloc_mode = true;
         else if (std::strcmp(argv[i], "--best-fit") == 0) best_fit = true;
         else if (std::strcmp(argv[i], "--segregated") == 0) segregated = true;
+        else if (std::strcmp(argv[i], "--slab") == 0) slab = true;
     }
+    if (slab) return run<myalloc::Allocator>(realloc_mode);
     if (segregated) return run<myalloc::SegregatedFitHeap>(realloc_mode);
     return best_fit ? run<myalloc::BestFitHeap>(realloc_mode)
                     : run<myalloc::FirstFitHeap>(realloc_mode);

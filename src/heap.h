@@ -153,6 +153,10 @@ public:
     bool init(std::size_t arena_bytes);
 
     void* malloc(std::size_t n);
+    // A block whose payload address is a multiple of `alignment` (a power of
+    // two >= 16); nullptr if alignment is invalid or nothing fits (ADR-014).
+    // Freed with free(), like any block.
+    void* aligned_malloc(std::size_t alignment, std::size_t n);
     FreeStatus free(void* p);
     // On failure returns nullptr and leaves p untouched. If `status` is
     // non-null it receives the validation result for p.

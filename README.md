@@ -22,11 +22,12 @@ A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_reallo
 *   **`realloc` and `calloc`.** `realloc` shrinks in place, grows in place into a free successor, and otherwise moves. A failed `realloc` leaves the original block valid and untouched. `calloc` checks the size multiplication for overflow.
 *   **Three fit policies behind one template.** `BasicHeap<SegregatedFit>` (the default: exact-size bins up to 1 KiB, power-of-two bins above, a bitmap to find the next non-empty bin), `BasicHeap<FirstFit>` and `BasicHeap<BestFit>` share every line of code except the bins and the search. The policy is chosen at compile time with no runtime branch.
 *   **Use-after-free hardening.** A write through a dangling pointer can never make the allocator read outside its arena or loop forever. Free-list links are validated before being followed, unlinking checks both neighbours first, and walks are bounded. Detected corruption stops the heap with a clear diagnostic instead of a segfault later.
+*   **Opt-in small-object slab** (`myalloc::Allocator`): 16 KiB slabs carved from the heap, out-of-band free-slot bitmaps (use-after-free writes cannot reach its bookkeeping), exact double-free detection. 10% faster and 14% denser on app-like, but it failed the pre-set rule on the realloc workload, so it is not the default ([ADR-014](docs/adr/014-small-object-slab.md)). The heap also gained `aligned_malloc`.
 *   **Allocation tracking and leak reporting.** `my_alloc_stats()` returns bytes and blocks in use, peak, free space and fragmentation in O(1); `my_report_leaks()` lists every live block; `MYALLOC_LEAK_REPORT=1` prints that report at exit. No cost on the hot path.
 *   **Strict checks at the API boundary.** Double frees, pointers outside the arena, misaligned pointers and requests too large for the arena (including `calloc` overflow) are rejected. Bad frees abort with a named diagnostic; oversized requests return `NULL`.
-*   **324 test runs.** 108 tests, built three times (once per fit policy). They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan. The allocator core has 99.7% line and 100% function coverage.
+*   **384 test runs.** 128 tests, built three times (once per fit policy). They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan. The allocator core has 99.7% line and 100% function coverage.
 *   **The checks are themselves tested.** 11 deliberate mutations (an invariant, a merge, a hardening check broken on purpose) each confirmed that a test fails, except one, which showed a hardening check was redundant; it was removed.
-*   **7-job CI pipeline** (GitHub Actions) on every push: a blocking format check, sanitized builds and all 324 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
+*   **7-job CI pipeline** (GitHub Actions) on every push: a blocking format check, sanitized builds and all 384 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
 *   **Measured, not argued.** Deterministic footprint measurements and a trace-replay timing harness compare against the macOS system allocator, with its small-object fast path as a control. Instruments profiles (Time Profiler attributed through inlining, plus the CPU Counters bottleneck breakdown) explain *why* the numbers look the way they do.
 
 ## System Architecture
@@ -58,7 +59,7 @@ header word = block size (multiple of 16) | alloc bit | prev-alloc bit
 | :--- | :--- |
 | Language | C++17 |
 | Build System | CMake, with GoogleTest v1.17.0 fetched via `FetchContent`; arm64 forced on Apple Silicon |
-| Testing | GoogleTest: 108 tests across 11 files, built once per fit policy (324 runs) |
+| Testing | GoogleTest: 128 tests across 13 files, built once per fit policy (384 runs) |
 | Sanitizers | AddressSanitizer + UndefinedBehaviorSanitizer (`MYALLOC_ASAN`, `MYALLOC_UBSAN`) |
 | Coverage | clang source-based coverage (`llvm-cov`): allocator core 99.7% lines, 100% functions |
 | Benchmarking | Custom trace-replay wall-clock harness (batch timing, median + IQR over 15 reps) and a deterministic footprint probe |
@@ -218,14 +219,14 @@ These are scope boundaries, not oversights (see [docs/plan.md](docs/plan.md)):
 
 *   **Single-threaded.** No locks or per-thread caches. The code contains no concurrency primitive at all.
 *   **One fixed 256 MiB arena behind the C API.** It never grows, and freed memory is never returned to the OS.
-*   **No small-object slab** (size-class rounding) and **single-level range bins**: the next measured steps (task list Phase 14; ADR-011 Alternative 2).
+*   **The slab is opt-in, not the default** (C++ `myalloc::Allocator` only): it regresses the realloc workload (+20% time, +40% footprint, ADR-014). **Range bins are single-level** (ADR-011 Alternative 2).
 *   **Use-after-free hardening guarantees memory safety and termination, not detection**, and is not a defence against a deliberate attacker. Free-list pointers aren't mangled or checksummed.
 *   **Not a drop-in system `malloc`.** No `operator new` hook or symbol interposition.
 *   **One machine, one baseline.** Measured on an Apple M2 against macOS libmalloc only; glibc was not measured.
 
 ## Testing
 
-108 tests across 11 files, each built three times: `myalloc_tests` (segregated fits, the default), `myalloc_tests_firstfit` and `myalloc_tests_bestfit` (that policy as the default, C API included), so **324 runs**.
+128 tests across 13 files, each built three times: `myalloc_tests` (segregated fits, the default), `myalloc_tests_firstfit` and `myalloc_tests_bestfit` (that policy as the default, C API included), so **384 runs**.
 
 *   **Unit tests:** alloc/free and reuse order, split arithmetic and thresholds, merges in each direction, prev-alloc bit maintenance, every `realloc` path (shrink, grow in place, move, failure leaves the original intact), `calloc` zeroing and overflow, alignment for every size 0–600, fit-policy choices with exact search-step counts.
 *   **Randomised stress:** seeded alloc/free/realloc mixes with the heap invariant checker after **every** operation and fill patterns verified before every free. One configuration uses a 64 KiB arena to keep the out-of-memory path constantly exercised. Every seed must end with the arena back to one free block.
@@ -234,7 +235,7 @@ These are scope boundaries, not oversights (see [docs/plan.md](docs/plan.md)):
 *   **Tracking:** the heap walk visits exactly the live blocks in address order and stops safely at a damaged header; C API stats deltas and peak; the leak report's exact output; the at-exit report checked in forked children with the variable set and unset.
 *   **Mutation checks:** 11 deliberate breakages of invariants, merges, `realloc` and the hardening checks, each confirming that a test fails, except the one that exposed a redundant check (see [ADR-004](docs/adr/004-verification-strategy.md), [ADR-012](docs/adr/012-use-after-free-hardening.md)).
 
-All 324 runs pass under UBSan and under ASan + UBSan.
+All 384 runs pass under UBSan and under ASan + UBSan.
 
 **Coverage** (clang source-based, both binaries merged): allocator core 99.7% lines, 100% functions, 86.3% branches. Including the C API glue, 97.1% lines and 100% functions. The uncovered glue lines are abort diagnostics, which death tests do execute, but in child processes that `abort()` before writing profile data ([report](docs/results/coverage.md)).
 
@@ -252,7 +253,7 @@ All 324 runs pass under UBSan and under ASan + UBSan.
 The project fetches GoogleTest automatically via CMake `FetchContent` on first configure (network needed once). The allocator itself has no dependencies beyond POSIX `mmap`. Developed on macOS (Xcode clang); on Apple Silicon CMake forces native arm64 builds. It also builds warning-free and passes all tests on Linux with GCC 13 and Clang 18 (Ubuntu 24.04, arm64 locally and x86_64 in CI). All published benchmark numbers are from macOS.
 
 ```bash
-# Correctness: 108 tests x 2 fit policies, with UBSan
+# Correctness: 128 tests x 2 fit policies, with UBSan
 cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_UBSAN=ON
 cmake --build build-test -j
 ctest --test-dir build-test --output-on-failure
@@ -315,7 +316,7 @@ docs/results/     # raw CSVs, summaries, machine state per run, profiles, covera
 The full writeup lives in [`docs/`](docs/):
 
 *   [Project plan](docs/plan.md): scope, phases, budget, exit criteria
-*   [Architecture Decision Log](docs/README.md): 13 ADRs (001–013), each with alternatives considered and measured before/after numbers
+*   [Architecture Decision Log](docs/README.md): 14 ADRs (001–014), each with alternatives considered and measured before/after numbers
 *   [Testing strategy](docs/testing.md)
 *   [Environment](docs/environment.md): machine, toolchain, and the toolchain incidents found along the way
 *   [Results](docs/results/): every CSV behind every number in this README, with the machine state at the time

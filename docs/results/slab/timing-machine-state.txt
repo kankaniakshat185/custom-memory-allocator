@@ -1,0 +1,9 @@
+slab timing run started 2026-11-08 10:03:50 from the Claude Code session
+10:03  up 14 days, 11:05, 3 users, load averages: 5.86 7.86 9.44
+ %CPU COMM
+ 91.0 /usr/sbin/BTLEServer
+ 63.9 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.
+ 27.3 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 16.2 /Users/akshatkankani/.vscode/extensions/anthropic.claude-code-2.1.312-darwin-arm64/r
+finished 2026-11-08 10:03:54
+10:03  up 14 days, 11:05, 3 users, load averages: 5.55 7.76 9.39

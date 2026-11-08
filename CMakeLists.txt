@@ -73,6 +73,8 @@ set(MYALLOC_TEST_SOURCES
   tests/test_fit_policy.cpp
   tests/test_hardening.cpp
   tests/test_tracking.cpp
+  tests/test_slab.cpp
+  tests/test_aligned.cpp
   tests/test_alignment.cpp
   tests/test_stress.cpp
   tests/test_api_integration.cpp)

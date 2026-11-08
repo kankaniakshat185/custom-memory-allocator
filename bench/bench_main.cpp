@@ -11,6 +11,7 @@
 //               heap_bestfit (trees with fit policies, ADR-009), heap_segfit and
 //               heap_firstfit (ADR-011). "heap" is the tree's default policy:
 //               first-fit up to Phase 12, segregated fits from Phase 13.
+//               slab_segfit: slab front end + segregated fits (ADR-014).
 //   MallocNanoZone=0 in the environment relabels "system" as "system_nano_off".
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -27,6 +28,9 @@
 
 #include "harness.h"
 #include "heap.h"
+#if __has_include("allocator.h")
+#include "allocator.h"
+#endif
 #include "workloads.h"
 
 namespace {
@@ -191,6 +195,31 @@ void report(const Options& o, const std::string& alloc, const Trace& t,
     std::fflush(stdout);
 }
 
+#ifdef MYALLOC_HAS_SLAB
+// The slab front end (ADR-014): slabs are carved from the heap, so pre-faulting
+// the heap arena up to its warm-up high-water covers them too.
+template <class F>
+std::vector<RunResult> run_slab(const Trace& t, int reps) {
+    std::size_t heap_hw;
+    {
+        myalloc::BasicAllocator<F> a;
+        if (!a.init(kArena)) return {};
+        HeapAlloc<ReallocMode::Native, myalloc::BasicAllocator<F>> w{a};
+        replay(w, t);
+        heap_hw = a.heap().stats().high_water;
+    }
+    std::vector<RunResult> runs;
+    for (int r = 0; r < reps; ++r) {
+        auto a = std::make_unique<myalloc::BasicAllocator<F>>();
+        if (!a->init(kArena)) return runs;
+        prefault(a->heap(), heap_hw);  // slabs live inside the heap arena
+        HeapAlloc<ReallocMode::Native, myalloc::BasicAllocator<F>> w{*a};
+        runs.push_back(replay(w, t));
+    }
+    return runs;
+}
+#endif
+
 template <ReallocMode Mode, class H = myalloc::Heap>
 std::vector<RunResult> run_heap(const Trace& t, int reps) {
     std::size_t high_water;
@@ -287,6 +316,10 @@ int main(int argc, char** argv) {
             else if (a == "heap_firstfit")
                 report(o, a, t, run_heap<ReallocMode::Native, myalloc::FirstFitHeap>(t, o.reps),
                        raw);
+#endif
+#ifdef MYALLOC_HAS_SLAB
+            else if (a == "slab_segfit")
+                report(o, a, t, run_slab<myalloc::SegregatedFit>(t, o.reps), raw);
 #endif
             else std::fprintf(stderr, "unknown allocator %s\n", a.c_str());
         }

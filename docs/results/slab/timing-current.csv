@@ -1,0 +1,13 @@
+label,allocator,workload,ops,reps,min_ns,median_ns,max_ns,spread_pct,batch_p50_ns,batch_p99_ns,failures_per_rep
+current,system,random_16B_64KiB,1003690,15,28.84,30.83,41.97,42.6,30.40,85.32,0
+current,heap,random_16B_64KiB,1003690,15,25.97,26.72,44.75,70.3,26.08,71.77,0
+current,slab_segfit,random_16B_64KiB,1003690,15,25.78,26.09,37.60,45.3,25.80,51.62,0
+current,system,app_like,1006958,15,18.59,18.80,19.55,5.1,18.72,25.15,0
+current,heap,app_like,1006958,15,16.31,16.40,16.98,4.1,16.32,22.40,0
+current,slab_segfit,app_like,1006958,15,14.25,14.75,16.51,15.4,14.73,21.04,0
+current,system,adversarial_holes,420000,15,12.27,12.33,12.77,4.0,12.00,18.37,0
+current,heap,adversarial_holes,420000,15,14.90,15.11,15.64,4.9,13.67,45.65,0
+current,slab_segfit,adversarial_holes,420000,15,10.59,10.67,11.06,4.4,8.22,19.57,0
+current,system,realloc_growth,508938,15,37.29,38.38,41.03,9.7,37.90,60.44,0
+current,heap,realloc_growth,508938,15,22.33,22.57,23.06,3.2,20.30,43.41,0
+current,slab_segfit,realloc_growth,508938,15,26.13,27.14,32.70,24.2,26.45,58.85,0

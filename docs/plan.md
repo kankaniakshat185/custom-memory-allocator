@@ -206,12 +206,12 @@ Before the new features, so every later ADR gets charts.
 
 ### Phase 14: Small-object slab fast path, Tier 2 (≈ 2 d), ADR-014
 Builds on Phase 13's size classes.
-- [ ] Fixed-size slabs for small classes (e.g. ≤ 256 B), carved from the arena
-- [ ] Free dispatch: slab vs. general block, identified cheaply and safely
-- [ ] Hardening for slab free lists (use-after-free must still never crash)
-- [ ] Tests, fuzz and mutation checks
-- [ ] Benchmark app-like against libmalloc with Nano on and off. Target: close the measured 1.14× gap; profile to confirm
-- [ ] ADR-014
+- [x] Fixed-size slabs for small classes (e.g. ≤ 256 B), carved from the arena
+- [x] Free dispatch: slab vs. general block, identified cheaply and safely
+- [x] Hardening for slab free lists (use-after-free must still never crash)
+- [x] Tests, fuzz and mutation checks
+- [x] Benchmark app-like against libmalloc with Nano on and off. Target: close the measured 1.14× gap; profile to confirm
+- [x] ADR-014 (result: failed the pre-set rule on the realloc workload, so it ships opt-in as `myalloc::Allocator`)
 
 ### Phase 15: `operator new`/`delete` + STL allocator, Tier 2 (≈ 0.5–1 d), ADR-015
 Once the allocator is at its fastest.

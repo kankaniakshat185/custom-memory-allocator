@@ -194,6 +194,45 @@ void* BasicHeap<Fit>::malloc(std::size_t n) {
     return payload(h);
 }
 
+// Searches for a block with room for the payload plus worst-case alignment
+// padding, then splits the padding off the front as a free block (it is either
+// 0 or >= kMinBlock bytes) and lets place() split the tail (ADR-014).
+template <class Fit>
+void* BasicHeap<Fit>::aligned_malloc(std::size_t alignment, std::size_t n) {
+    if (alignment <= kAlign) return malloc(n);
+    if ((alignment & (alignment - 1)) != 0) return nullptr;
+    if (corrupt_ || arena_.base() == nullptr || n > arena_.size() || alignment > arena_.size())
+        return nullptr;
+    const std::size_t need = block_size_for(n);
+
+    Header* h = find_fit(need + alignment + kMinBlock);
+    if (!h || !list_remove(h)) return nullptr;
+    const std::size_t total = block_size(h);
+    auto* start = reinterpret_cast<std::uint8_t*>(h);
+    auto pay = reinterpret_cast<std::uintptr_t>(start + kHeaderSize);
+    if (pay % alignment != 0)
+        pay = (reinterpret_cast<std::uintptr_t>(start + kHeaderSize + kMinBlock) + alignment - 1) &
+              ~(alignment - 1);
+    const auto front =
+        static_cast<std::size_t>(reinterpret_cast<std::uint8_t*>(pay) - kHeaderSize - start);
+
+    Header* g = h;
+    if (front > 0) {
+        // The front gap becomes a free block; its predecessor is allocated
+        // (h was free, and free blocks never touch), so no merge is needed.
+        h->word = front | (h->word & kPrevAllocBit);
+        write_footer(h);
+        list_push(h);
+        g = reinterpret_cast<Header*>(start + front);
+        g->word = total - front;  // prev-alloc bit clear: the front block is free
+    }
+    place(g, total - front, need);
+    stats_.bytes_in_use += block_size(g);
+    ++stats_.live_blocks;
+    note_extent(g);
+    return payload(g);
+}
+
 template <class Fit>
 FreeStatus BasicHeap<Fit>::validate(void* p) const {
     auto* b = static_cast<std::uint8_t*>(p);

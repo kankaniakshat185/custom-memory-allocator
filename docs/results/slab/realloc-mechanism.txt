@@ -1,0 +1,5 @@
+segregated heap : reallocs moved 108859 of 141726  (77%)
+slab + segregated: reallocs moved 104551 of 141726  (74%)
+at the high-water peak: slabs hold 2592 KiB, live slab objects use 2305 KiB -> slabs 89% full
+new slabs taken 172, of which raised the high-water mark 19 (11%)
+high-water growth caused by taking slabs: 367 KiB of 3888 KiB total (9%)

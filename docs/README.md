@@ -25,3 +25,4 @@
 | [011](adr/011-segregated-free-lists.md) | Segregated size-class free lists, now the default policy | Accepted (timing re-run clean in Phase 17) |
 | [012](adr/012-use-after-free-hardening.md) | Use-after-free hardening: validated links, safe unlinking, fail-stop | Accepted |
 | [013](adr/013-allocation-tracking-and-leak-report.md) | Allocation tracking and leak report: O(1) stats, heap-walk report, opt-in at-exit report | Accepted |
+| [014](adr/014-small-object-slab.md) | Small-object slab: built, measured, shipped opt-in (failed the pre-set rule on realloc) | Accepted (opt-in) |
