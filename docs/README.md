@@ -26,3 +26,4 @@
 | [012](adr/012-use-after-free-hardening.md) | Use-after-free hardening: validated links, safe unlinking, fail-stop | Accepted |
 | [013](adr/013-allocation-tracking-and-leak-report.md) | Allocation tracking and leak report: O(1) stats, heap-walk report, opt-in at-exit report | Accepted |
 | [014](adr/014-small-object-slab.md) | Small-object slab: built, measured, shipped opt-in (failed the pre-set rule on realloc) | Accepted (opt-in) |
+| [015](adr/015-operator-new-and-stl-allocator.md) | `myalloc::allocator<T>`, opt-in global `operator new`/`delete` replacement, `my_aligned_alloc` | Accepted |

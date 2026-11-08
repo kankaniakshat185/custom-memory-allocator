@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "heap.h"
 
@@ -24,8 +25,13 @@ void leak_report_at_exit() {
 
 }  // namespace
 
+// The heap is constructed in static storage and never destroyed: with the
+// global operator new/delete replacement (ADR-015), static destructors that
+// run after a function-local static Heap was destroyed would still call
+// operator delete. The OS reclaims the arena at exit.
 Heap& default_heap() {
-    static Heap heap;
+    alignas(Heap) static unsigned char storage[sizeof(Heap)];
+    static Heap& heap = *new (storage) Heap;
     static const bool ok = [] {
         const bool initialised = heap.init(std::size_t{256} << 20);
         std::atexit(leak_report_at_exit);
@@ -77,6 +83,10 @@ void* my_realloc(void* p, size_t n) {
     void* q = myalloc::default_heap().realloc(p, n, &st);
     die_if_bad(st, "my_realloc");
     return q;
+}
+
+void* my_aligned_alloc(size_t alignment, size_t n) {
+    return checked(myalloc::default_heap().aligned_malloc(alignment, n), "my_aligned_alloc");
 }
 
 void* my_calloc(size_t count, size_t size) {

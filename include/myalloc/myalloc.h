@@ -6,6 +6,9 @@
 extern "C" {
 #endif
 
+// Alignment of every pointer my_malloc returns.
+#define MY_MALLOC_ALIGNMENT 16
+
 // Returns a 16-byte aligned block of at least n bytes, or NULL if the arena is
 // exhausted. my_malloc(0) returns a valid, unique, freeable pointer.
 void* my_malloc(size_t n);
@@ -27,6 +30,12 @@ void* my_realloc(void* p, size_t n);
 // Zeroed array of count * size bytes; NULL if the product overflows or the
 // arena is exhausted.
 void* my_calloc(size_t count, size_t size);
+
+// A block of at least n bytes whose address is a multiple of `alignment`, or
+// NULL if alignment is not a power of two or the arena is exhausted. Freed
+// with my_free. Alignments <= MY_MALLOC_ALIGNMENT behave like my_malloc
+// (ADR-014, ADR-015).
+void* my_aligned_alloc(size_t alignment, size_t n);
 
 // ---- Allocation tracking (ADR-013) ----------------------------------------
 // Sizes are block-based: the allocator does not store requested sizes, so

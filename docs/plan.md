@@ -215,10 +215,10 @@ Builds on Phase 13's size classes.
 
 ### Phase 15: `operator new`/`delete` + STL allocator, Tier 2 (≈ 0.5–1 d), ADR-015
 Once the allocator is at its fastest.
-- [ ] Public `myalloc::allocator<T>` header (promoted from the test-only adapter)
-- [ ] Opt-in global `operator new`/`delete` replacement as a separate library target, covering the sized, aligned (`align_val_t`) and `nothrow` variants
-- [ ] A separate test binary for the global replacement, plus a demo using STL containers
-- [ ] ADR-015
+- [x] Public `myalloc::allocator<T>` header (promoted from the test-only adapter)
+- [x] Opt-in global `operator new`/`delete` replacement as a separate library target, covering the sized, aligned (`align_val_t`) and `nothrow` variants
+- [x] A separate test binary for the global replacement, plus a demo using STL containers
+- [x] ADR-015
 
 ### Phase 16: Thread safety, Tier 2 (≈ 1.5–2 d), ADR-016
 Last, as §1 requires. If time runs short, this is the first thing to cut.
@@ -230,6 +230,7 @@ Last, as §1 requires. If time runs short, this is the first thing to cut.
 
 ### Phase 17: Final pass → `v2.0` (≈ 0.5 d)
 - [ ] Re-run the final comparison (all versions and policies plus libmalloc), coverage, and the profiles where they changed
+- [ ] Re-run `bench/scripts/run_stl.sh` on a quiet machine and apply ADR-015's rule for switching the `operator new` replacement to heap + slab
 - [ ] Update the README: Features, Comparative Study, Bottlenecks, Limitations, Testing, plus the charts
 - [ ] ADR consistency pass, then refresh the resume bullets with the new results
 - [ ] Commit and `git tag v2.0`

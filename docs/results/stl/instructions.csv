@@ -1,0 +1,13 @@
+allocator,workload,reps,instructions_per_rep
+system,map_churn,5,480197410
+myalloc,map_churn,5,391844139
+slab,map_churn,5,346300690
+system,string_vector,5,198410691
+myalloc,string_vector,5,204465182
+slab,string_vector,5,155248025
+system,hash_count,5,303504647
+myalloc,hash_count,5,358192407
+slab,hash_count,5,288131960
+system,list_queue,5,429086352
+myalloc,list_queue,5,494987043
+slab,list_queue,5,362121339

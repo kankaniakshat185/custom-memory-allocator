@@ -1,0 +1,13 @@
+allocator,workload,max_rss_bytes
+system,map_churn,11403264
+myalloc,map_churn,8486912
+slab,map_churn,8486912
+system,string_vector,40845312
+myalloc,string_vector,34930688
+slab,string_vector,35094528
+system,hash_count,8945664
+myalloc,hash_count,10010624
+slab,hash_count,8552448
+system,list_queue,17547264
+myalloc,list_queue,17645568
+slab,list_queue,18055168

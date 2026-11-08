@@ -56,6 +56,13 @@ add_library(myalloc_bestfit ${MYALLOC_SOURCES})
 target_include_directories(myalloc_bestfit PUBLIC include PRIVATE src)
 target_compile_definitions(myalloc_bestfit PUBLIC MYALLOC_BEST_FIT)
 
+# Opt-in global operator new/delete replacement (ADR-015). An OBJECT library,
+# so linking it always brings in every replaced form: a static archive would
+# only contribute members that resolve a symbol nothing else defines.
+add_library(myalloc_new OBJECT src/new_delete.cpp)
+target_include_directories(myalloc_new PUBLIC include)
+target_link_libraries(myalloc_new PUBLIC myalloc)
+
 enable_testing()
 include(FetchContent)
 FetchContent_Declare(googletest
@@ -75,6 +82,7 @@ set(MYALLOC_TEST_SOURCES
   tests/test_tracking.cpp
   tests/test_slab.cpp
   tests/test_aligned.cpp
+  tests/test_stl_allocator.cpp
   tests/test_alignment.cpp
   tests/test_stress.cpp
   tests/test_api_integration.cpp)
@@ -95,6 +103,15 @@ target_link_libraries(myalloc_tests_bestfit PRIVATE myalloc_bestfit GTest::gtest
 target_include_directories(myalloc_tests_bestfit PRIVATE src)
 gtest_discover_tests(myalloc_tests_bestfit TEST_PREFIX "bestfit.")
 
+# Every allocation in this binary, GoogleTest's included, goes through the heap.
+add_executable(myalloc_new_tests tests/test_new_delete.cpp)
+target_link_libraries(myalloc_new_tests PRIVATE myalloc_new GTest::gtest_main)
+target_include_directories(myalloc_new_tests PRIVATE src)
+gtest_discover_tests(myalloc_new_tests TEST_PREFIX "newdelete.")
+
+add_executable(stl_demo examples/stl_demo.cpp)
+target_link_libraries(stl_demo PRIVATE myalloc_new)
+
 add_executable(footprint_probe bench/footprint_probe.cpp)
 target_link_libraries(footprint_probe PRIVATE myalloc)
 target_include_directories(footprint_probe PRIVATE src)
@@ -106,3 +123,14 @@ target_include_directories(bench_timing PRIVATE src)
 add_executable(freelist_length bench/freelist_length.cpp bench/workloads.cpp)
 target_link_libraries(freelist_length PRIVATE myalloc)
 target_include_directories(freelist_length PRIVATE src)
+
+# The same container workloads under the platform allocator and under myalloc.
+add_executable(stl_bench_system bench/stl_bench.cpp)
+add_executable(stl_bench_myalloc bench/stl_bench.cpp)
+target_link_libraries(stl_bench_myalloc PRIVATE myalloc_new)
+target_compile_definitions(stl_bench_myalloc PRIVATE STL_BENCH_MYALLOC)
+# Bench-only: the same workloads with new/delete backed by heap + slab (ADR-015).
+add_executable(stl_bench_slab bench/stl_bench.cpp bench/new_delete_slab.cpp)
+target_link_libraries(stl_bench_slab PRIVATE myalloc)
+target_include_directories(stl_bench_slab PRIVATE src)
+target_compile_definitions(stl_bench_slab PRIVATE STL_BENCH_SLAB)

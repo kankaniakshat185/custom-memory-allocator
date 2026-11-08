@@ -20,7 +20,7 @@ jobs:
       - name: Install the pinned clang-format (must match the version used locally)
         run: pip install clang-format==22.1.8
       - name: Check formatting
-        run: git ls-files '*.cpp' '*.h' | xargs clang-format --style=file --dry-run -Werror
+        run: git ls-files '*.cpp' '*.h' '*.hpp' | xargs clang-format --style=file --dry-run -Werror
 
   macos-ubsan:
     name: macOS · Debug + UBSan
@@ -34,7 +34,7 @@ jobs:
       - name: Test (all policies)
         run: ctest --test-dir build-test --output-on-failure -j 4
       - name: Test binaries also pass when run directly (not isolated per test)
-        run: ./build-test/myalloc_tests && ./build-test/myalloc_tests_firstfit && ./build-test/myalloc_tests_bestfit
+        run: ./build-test/myalloc_tests && ./build-test/myalloc_tests_firstfit && ./build-test/myalloc_tests_bestfit && ./build-test/myalloc_new_tests
 
   macos-asan:
     name: macOS · Debug + ASan + UBSan
@@ -67,6 +67,12 @@ jobs:
         run: env -u MallocNanoZone ./build/bench_timing --reps 1 --alloc system,heap,heap_bestfit
       - name: Free-list probe smoke run
         run: ./build/freelist_length app_like
+      - name: STL demo under the global operator new replacement, with leak report
+        run: |
+          ./build/stl_demo
+          MYALLOC_LEAK_REPORT=1 ./build/stl_demo leak 2>&1 | grep -q "2 live blocks"
+      - name: STL container benchmark smoke run (1 rep, all three new/delete variants)
+        run: for b in system myalloc slab; do env -u MallocNanoZone ./build/stl_bench_$b --reps 1; done
 
   linux:
     name: Linux · ${{ matrix.cxx }} · ${{ matrix.name }}
@@ -103,17 +109,17 @@ jobs:
       - name: Configure
         run: cmake -S . -B build-cov -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
       - name: Build
-        run: cmake --build build-cov -j 4 --target myalloc_tests myalloc_tests_firstfit myalloc_tests_bestfit
+        run: cmake --build build-cov -j 4 --target myalloc_tests myalloc_tests_firstfit myalloc_tests_bestfit myalloc_new_tests
       - name: Run tests with profiling
         run: |
-          for b in myalloc_tests myalloc_tests_firstfit myalloc_tests_bestfit; do
+          for b in myalloc_tests myalloc_tests_firstfit myalloc_tests_bestfit myalloc_new_tests; do
             LLVM_PROFILE_FILE="cov-$b-%p.profraw" ./build-cov/$b
           done
       - name: Report
         run: |
           xcrun llvm-profdata merge -sparse cov-*.profraw -o cov.profdata
           xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_tests_firstfit \
-            -object ./build-cov/myalloc_tests_bestfit \
+            -object ./build-cov/myalloc_tests_bestfit -object ./build-cov/myalloc_new_tests \
             -instr-profile=cov.profdata src/ include/ | tee coverage.txt
           { echo '### Coverage'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

@@ -1,6 +1,6 @@
 // Integration tests: the public C API (my_malloc / my_free / my_realloc /
 // my_calloc) on the process-wide 256 MiB heap, used the way a program would
-// use it, including behind standard containers.
+// use it, including behind standard containers (myalloc::allocator, ADR-015).
 #include <gtest/gtest.h>
 
 #include <cstring>
@@ -12,6 +12,7 @@
 
 #include "heap.h"
 #include "heap_test_util.h"
+#include "myalloc/allocator.hpp"
 #include "myalloc/myalloc.h"
 
 namespace {
@@ -19,30 +20,6 @@ struct Node {  // a linked structure built entirely from my_malloc
     int value;
     Node* next;
     char pad[20];
-};
-
-// Minimal C++17 allocator adapter so standard containers draw from my_malloc.
-// Test-only; a public operator new / allocator wrapper is a Tier 2 item.
-template <class T>
-struct MyAlloc {
-    using value_type = T;
-    MyAlloc() = default;
-    template <class U>
-    MyAlloc(const MyAlloc<U>&) {}
-    T* allocate(std::size_t n) {
-        if (n > SIZE_MAX / sizeof(T)) throw std::bad_alloc();
-        if (void* p = my_malloc(n * sizeof(T))) return static_cast<T*>(p);
-        throw std::bad_alloc();
-    }
-    void deallocate(T* p, std::size_t) { my_free(p); }
-    template <class U>
-    bool operator==(const MyAlloc<U>&) const {
-        return true;
-    }
-    template <class U>
-    bool operator!=(const MyAlloc<U>&) const {
-        return false;
-    }
 };
 }  // namespace
 
@@ -161,8 +138,8 @@ TEST(Api, CallocMatrixIsZeroed) {
     EXPECT_EQ(my_calloc(SIZE_MAX / 4, 8), nullptr);
 }
 
-TEST(Api, StdVectorWithMyAllocator) {
-    std::vector<int, MyAlloc<int>> v;
+TEST(Api, StdVectorWithMyallocAllocator) {
+    std::vector<int, myalloc::allocator<int>> v;
     for (int i = 0; i < 100000; ++i) v.push_back(i);
     long long sum = 0;
     for (int x : v) sum += x;
@@ -172,10 +149,10 @@ TEST(Api, StdVectorWithMyAllocator) {
     EXPECT_HEAP_OK(myalloc::default_heap());
 }
 
-TEST(Api, StdMapAndStringsWithMyAllocator) {
-    using Str = std::basic_string<char, std::char_traits<char>, MyAlloc<char>>;
+TEST(Api, StdMapAndStringsWithMyallocAllocator) {
+    using Str = std::basic_string<char, std::char_traits<char>, myalloc::allocator<char>>;
     {
-        std::map<int, Str, std::less<int>, MyAlloc<std::pair<const int, Str>>> m;
+        std::map<int, Str, std::less<int>, myalloc::allocator<std::pair<const int, Str>>> m;
         std::mt19937 rng(9);
         for (int i = 0; i < 5000; ++i) m[static_cast<int>(rng() % 2000)] = Str(rng() % 200, 'x');
         for (int i = 0; i < 2000; i += 3) m.erase(i);

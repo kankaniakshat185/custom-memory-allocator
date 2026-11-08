@@ -1,0 +1,5 @@
+load_average: 14.97 27.64 24.34
+top_cpu:
+ 98.5 /usr/sbin/BTLEServer
+  0.8 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  0.8 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU
