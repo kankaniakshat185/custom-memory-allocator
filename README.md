@@ -1,6 +1,5 @@
 <h1 align="center">Custom Memory Allocator</h1>
 
-<p align="center"><a href="https://github.com/kankaniakshat185/custom-memory-allocator/actions/workflows/ci.yml"><img src="https://github.com/kankaniakshat185/custom-memory-allocator/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
 
 A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_realloc` and `my_calloc` on one `mmap`'d arena. It uses an explicit free list, block splitting, O(1) boundary-tag coalescing, segregated size-class free lists (the default; first-fit and best-fit are compile-time alternatives), and hardening against use-after-free writes. Single-threaded by design (see Limitations & Non-Goals below). Every performance claim here rests on three things:
 - a heap invariant checker that passes after every operation of the stress tests;
