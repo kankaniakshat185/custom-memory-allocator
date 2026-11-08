@@ -222,15 +222,16 @@ Once the allocator is at its fastest.
 
 ### Phase 16: Thread safety, Tier 2 (≈ 1.5–2 d), ADR-016
 Last, as §1 requires. If time runs short, this is the first thing to cut.
-- [ ] Multithreaded benchmark harness (N threads, per-thread traces, throughput and scaling)
-- [ ] Step 1: global-lock wrapper; measure contention and scaling against libmalloc
-- [ ] ThreadSanitizer job (local and CI)
-- [ ] Step 2, decided by the data: per-thread caches or arenas, or stop at the lock and document why
-- [ ] ADR-016
+- [x] Multithreaded benchmark harness (N threads, per-thread traces, throughput and scaling)
+- [x] Step 1: global-lock wrapper; measure contention and scaling against libmalloc
+- [x] ThreadSanitizer job (local and CI)
+- [x] Step 2, decided by the data: per-thread caches or arenas, or stop at the lock and document why
+- [x] ADR-016
 
 ### Phase 17: Final pass → `v2.0` (≈ 0.5 d)
 - [ ] Re-run the final comparison (all versions and policies plus libmalloc), coverage, and the profiles where they changed
 - [ ] Re-run `bench/scripts/run_stl.sh` on a quiet machine and apply ADR-015's rule for switching the `operator new` replacement to heap + slab
+- [ ] Re-run `bench/scripts/run_mt.sh` on a quiet machine and apply ADR-016's scaling rule (4 threads ≥ 2.5× one thread on app_like)
 - [ ] Update the README: Features, Comparative Study, Bottlenecks, Limitations, Testing, plus the charts
 - [ ] ADR consistency pass, then refresh the resume bullets with the new results
 - [ ] Commit and `git tag v2.0`

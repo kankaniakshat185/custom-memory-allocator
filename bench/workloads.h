@@ -25,9 +25,11 @@ struct Trace {
 };
 
 // Pre-generated, seeded traces (ADR-008). Every trace frees all its blocks at
-// the end, so a coalescing heap returns to one free block.
-Trace random_sizes();    // log-uniform 16 B..64 KiB, ~2000 live
-Trace app_like();        // 95% 16..256 B, 5% 4..256 KiB, ~3000 live
+// the end, so a coalescing heap returns to one free block. The default seeds
+// are the published ones; the multithreaded harness gives each thread its own
+// seed (ADR-016).
+Trace random_sizes(std::uint32_t seed = 11);  // log-uniform 16 B..64 KiB, ~2000 live
+Trace app_like(std::uint32_t seed = 12);      // 95% 16..256 B, 5% 4..256 KiB, ~3000 live
 Trace adversarial();     // non-fitting holes in front of exact-fit blocks (first-fit worst case)
 Trace realloc_growth();  // doubling buffers + small noise (same shape as footprint_probe)
 

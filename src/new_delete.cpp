@@ -2,8 +2,7 @@
 // Opt-in: linking the myalloc_new library replaces every replaceable form in
 // the program (C++17: plain, array, nothrow, align_val_t, sized delete).
 //
-// Not thread-safe, like the C API: only for single-threaded programs until
-// thread safety lands (Phase 16).
+// Thread-safe through the C API's per-thread arenas (ADR-016).
 #include <cstddef>
 #include <new>
 

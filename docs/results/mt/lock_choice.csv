@@ -1,0 +1,18 @@
+# Scratch builds of mt_bench with one global lock, MYALLOC_LOCK = -1 (none), 0 (std::mutex),
+# 1 (os_unfair_lock), 2 (spinlock); app_like, 5 reps, two rounds, 2026-11-08, load average ~13-16
+# (BTLEServer at ~95% CPU). Harness then started fresh threads per rep (one arena, so no
+# arena warm-up artifact). Total throughput, Mops/s.
+lock,threads,round1_mops,round2_mops
+none,1,57.39,52.30
+std_mutex,1,43.18,41.21
+std_mutex,2,21.70,21.43
+std_mutex,4,9.94,10.47
+std_mutex,8,6.98,6.83
+os_unfair_lock,1,31.89,49.00
+os_unfair_lock,2,8.24,8.43
+os_unfair_lock,4,10.34,10.71
+os_unfair_lock,8,9.22,9.33
+spinlock,1,34.74,43.74
+spinlock,2,33.97,34.61
+spinlock,4,21.01,30.17
+spinlock,8,24.51,29.53

@@ -61,7 +61,7 @@ C++17 has 20 replaceable forms: 8 `operator new` (plain and array, each also `no
 
 ### Other consequences
 - **The demo** ([examples/stl_demo.cpp](../../examples/stl_demo.cpp)) is an ordinary C++ program (`unordered_map`, `map`, `vector`, `string`, `shared_ptr`) that runs on the heap only because it links `myalloc_new`. It prints `my_alloc_stats` before and after: about 3,000 live blocks while the containers exist, back to 0 and one free block afterwards. `MYALLOC_LEAK_REPORT=1 stl_demo leak` lists the two blocks of a deliberately leaked `std::string`. The global it is stored in needs external linkage: with internal linkage, clang elided the unobserved `new` entirely, which [expr.new] allows.
-- **Not thread-safe**, like the C API. The replacement is for single-threaded programs until Phase 16; this is documented in the header and the source.
+- **Not thread-safe**, like the C API. The replacement is for single-threaded programs until Phase 16; this is documented in the header and the source. *Update:* since [ADR-016](016-thread-safety.md) the C API, and so the replacement and `myalloc::allocator`, is thread-safe through per-thread arenas.
 - **GoogleTest runs on the heap.** In `myalloc_new_tests`, every allocation in the process goes through the heap, including the test framework's own. It works as an extra integration test.
 - **`my_alloc_stats` counts all `operator new` traffic** when the replacement is linked, because both share one heap. That is the reason to keep the replacement on the C API rather than on a separate allocator.
 

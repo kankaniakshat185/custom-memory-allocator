@@ -48,6 +48,18 @@ jobs:
       - name: Test
         run: ctest --test-dir build-asan --output-on-failure -j 4
 
+  macos-tsan:
+    name: macOS · Debug + ThreadSanitizer
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_TSAN=ON
+      - name: Build
+        run: cmake --build build-tsan -j 4
+      - name: Test (a data race fails the test process)
+        run: ctest --test-dir build-tsan --output-on-failure -j 4
+
   macos-release:
     name: macOS · Release + footprint determinism
     runs-on: macos-15
@@ -67,6 +79,10 @@ jobs:
         run: env -u MallocNanoZone ./build/bench_timing --reps 1 --alloc system,heap,heap_bestfit
       - name: Free-list probe smoke run
         run: ./build/freelist_length app_like
+      - name: Multithreaded harness smoke run (1 rep)
+        run: |
+          env -u MallocNanoZone ./build/mt_bench --reps 1 --threads 1,4
+          ./build/mt_bench_global --reps 1 --threads 1,4 --alloc myalloc
       - name: STL demo under the global operator new replacement, with leak report
         run: |
           ./build/stl_demo
@@ -87,12 +103,18 @@ jobs:
           - cxx: clang++
             name: Debug + ASan + UBSan
             flags: -DMYALLOC_ASAN=ON -DMYALLOC_UBSAN=ON
+          - cxx: clang++
+            name: Debug + TSan
+            flags: -DMYALLOC_TSAN=ON
     steps:
       - uses: actions/checkout@v4
       - name: Configure
         run: cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} ${{ matrix.flags }}
       - name: Build (allocator, tests and benchmark tools)
         run: cmake --build build-test -j 4
+      - name: Lower ASLR entropy for ThreadSanitizer (its shadow mapping fails at 32 bits)
+        if: contains(matrix.flags, 'TSAN')
+        run: sudo sysctl vm.mmap_rnd_bits=28
       - name: Test
         run: ctest --test-dir build-test --output-on-failure -j 4
       - name: Footprint probe matches committed results (Release build)

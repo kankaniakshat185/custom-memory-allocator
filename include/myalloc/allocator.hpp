@@ -6,7 +6,7 @@
 //
 // Stateless: every instance uses the same heap, so all instances compare
 // equal and containers can swap or move storage between them freely.
-// Like the C API, it is not thread-safe.
+// Thread-safe, like the C API it calls (ADR-016).
 #pragma once
 #include <cstddef>
 #include <cstdint>

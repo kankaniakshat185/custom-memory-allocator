@@ -62,9 +62,9 @@ private:
 
 }  // namespace
 
-Trace random_sizes() {
+Trace random_sizes(std::uint32_t seed) {
     Builder b("random_16B_64KiB", 4096);
-    std::mt19937 rng(11);
+    std::mt19937 rng(seed);
     while (b.live() < 2000) b.alloc(log_uniform(rng, 16, 65536));
     for (int i = 0; i < 1000000; ++i) {
         if (b.live() > 0 && (rng() % 2 || b.full())) b.free_random(rng);
@@ -73,9 +73,9 @@ Trace random_sizes() {
     return b.finish();
 }
 
-Trace app_like() {
+Trace app_like(std::uint32_t seed) {
     Builder b("app_like", 8192);
-    std::mt19937 rng(12);
+    std::mt19937 rng(seed);
     auto size = [&] {
         return rng() % 100 < 95 ? log_uniform(rng, 16, 256) : log_uniform(rng, 4096, 262144);
     };

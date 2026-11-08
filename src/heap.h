@@ -234,7 +234,14 @@ using Heap = BestFitHeap;
 using Heap = SegregatedFitHeap;
 #endif
 
-// Process-wide heap behind the my_* C API (256 MiB, lazily created).
+// Process-wide heap behind the my_* C API (256 MiB, lazily created): arena 0,
+// the one a single-threaded program uses. Not locked: for tests and probes.
 Heap& default_heap();
+
+// The C API's per-thread arenas (ADR-016), for tests: how many exist, which
+// one owns p (-1 if none), and check() on every arena under its lock.
+int arena_count();
+int arena_index_of(const void* p);
+bool check_arenas(const char** why = nullptr);
 
 }  // namespace myalloc

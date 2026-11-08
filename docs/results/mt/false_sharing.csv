@@ -1,0 +1,10 @@
+# Per-thread arenas, app_like, 5 reps, two alternating rounds, 2026-11-08 (load average ~17).
+# unpadded: arena i's HeapLock directly followed by arena i+1's Heap in one static array;
+# padded: each Heap and each lock aligned to 128 B (the shipped layout). Total Mops/s.
+layout,threads,round1_mops,round2_mops
+unpadded,1,37.96,44.08
+unpadded,2,86.58,86.92
+unpadded,4,84.25,85.86
+padded,1,43.45,43.99
+padded,2,87.55,90.13
+padded,4,166.53,170.44

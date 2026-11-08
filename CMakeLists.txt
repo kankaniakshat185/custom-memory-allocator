@@ -28,11 +28,16 @@ endif()
 option(MYALLOC_UBSAN "Build with UndefinedBehaviorSanitizer" OFF)
 # ASan needs Xcode's clang; the Command Line Tools' clang 17 hung (docs/environment.md).
 option(MYALLOC_ASAN "Build with AddressSanitizer" OFF)
+option(MYALLOC_TSAN "Build with ThreadSanitizer" OFF)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 if(MYALLOC_UBSAN)
   add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=undefined)
+endif()
+if(MYALLOC_TSAN)
+  add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=thread)
 endif()
 if(MYALLOC_ASAN)
   add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
@@ -40,21 +45,26 @@ if(MYALLOC_ASAN)
 endif()
 
 set(MYALLOC_SOURCES src/arena.cpp src/heap.cpp src/myalloc.cpp)
+# The C API takes a lock and registers fork handlers (ADR-016).
+find_package(Threads REQUIRED)
 
 # Default library: segregated fits (ADR-011) behind myalloc::Heap and the
 # my_* C API.
 add_library(myalloc ${MYALLOC_SOURCES})
 target_include_directories(myalloc PUBLIC include PRIVATE src)
+target_link_libraries(myalloc PUBLIC Threads::Threads)
 
 # Same sources with first-fit and best-fit as the default policy (ADR-009), so
 # the whole test suite, C API included, runs against every policy.
 add_library(myalloc_firstfit ${MYALLOC_SOURCES})
 target_include_directories(myalloc_firstfit PUBLIC include PRIVATE src)
 target_compile_definitions(myalloc_firstfit PUBLIC MYALLOC_FIRST_FIT)
+target_link_libraries(myalloc_firstfit PUBLIC Threads::Threads)
 
 add_library(myalloc_bestfit ${MYALLOC_SOURCES})
 target_include_directories(myalloc_bestfit PUBLIC include PRIVATE src)
 target_compile_definitions(myalloc_bestfit PUBLIC MYALLOC_BEST_FIT)
+target_link_libraries(myalloc_bestfit PUBLIC Threads::Threads)
 
 # Opt-in global operator new/delete replacement (ADR-015). An OBJECT library,
 # so linking it always brings in every replaced form: a static archive would
@@ -85,6 +95,7 @@ set(MYALLOC_TEST_SOURCES
   tests/test_stl_allocator.cpp
   tests/test_alignment.cpp
   tests/test_stress.cpp
+  tests/test_threads.cpp
   tests/test_api_integration.cpp)
 include(GoogleTest)
 
@@ -134,3 +145,20 @@ add_executable(stl_bench_slab bench/stl_bench.cpp bench/new_delete_slab.cpp)
 target_link_libraries(stl_bench_slab PRIVATE myalloc)
 target_include_directories(stl_bench_slab PRIVATE src)
 target_compile_definitions(stl_bench_slab PRIVATE STL_BENCH_SLAB)
+
+# Multithreaded throughput and scaling (ADR-016): the shipped per-thread
+# arenas, one global lock (MYALLOC_ARENAS=1), and, for the single-thread cost
+# of locking only, no lock at all (not thread-safe: run it with 1 thread).
+add_executable(mt_bench bench/mt_bench.cpp bench/workloads.cpp)
+target_link_libraries(mt_bench PRIVATE myalloc Threads::Threads)
+target_include_directories(mt_bench PRIVATE src)
+
+add_executable(mt_bench_global bench/mt_bench.cpp bench/workloads.cpp ${MYALLOC_SOURCES})
+target_include_directories(mt_bench_global PRIVATE include src)
+target_compile_definitions(mt_bench_global PRIVATE MYALLOC_ARENAS=1)
+target_link_libraries(mt_bench_global PRIVATE Threads::Threads)
+
+add_executable(mt_bench_nolock bench/mt_bench.cpp bench/workloads.cpp ${MYALLOC_SOURCES})
+target_include_directories(mt_bench_nolock PRIVATE include src)
+target_compile_definitions(mt_bench_nolock PRIVATE MYALLOC_ARENAS=1 MYALLOC_LOCK=-1)
+target_link_libraries(mt_bench_nolock PRIVATE Threads::Threads)

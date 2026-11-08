@@ -6,6 +6,11 @@
 extern "C" {
 #endif
 
+// Every function is thread-safe (ADR-016). Each thread allocates from its
+// own arena (up to 8, assigned round-robin; arena 0 is created before main),
+// and a block can be freed or reallocated from any thread. fork() is safe:
+// the arena locks are held across it.
+
 // Alignment of every pointer my_malloc returns.
 #define MY_MALLOC_ALIGNMENT 16
 

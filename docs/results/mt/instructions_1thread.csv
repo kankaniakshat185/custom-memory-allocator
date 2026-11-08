@@ -1,0 +1,9 @@
+variant,trace,instructions_per_rep
+libmalloc,app_like,203891689
+arenas,app_like,265212469
+global_lock,app_like,263419027
+no_lock,app_like,235064917
+libmalloc,random,323926908
+arenas,random,371717308
+global_lock,random,368565653
+no_lock,random,341143270
