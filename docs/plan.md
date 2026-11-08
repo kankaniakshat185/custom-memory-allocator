@@ -196,13 +196,13 @@ Before the new features, so every later ADR gets charts.
 - [x] ADR-013 + README
 
 ### Phase 13: Segregated free lists (≈ 1.5–2 d), ADR-011
-- [ ] Size-class design: classes plus a bitmap of non-empty classes; search from the request's class upward
-- [ ] Implement it as a third policy (`SegregatedFit`), so first-fit and best-fit stay comparable
-- [ ] Integrate the use-after-free hardening (per-class lists, the same validation)
-- [ ] The whole test suite builds and runs under all three policies; mutation checks
-- [ ] Footprint probe, timing and profile against first-fit, best-fit and libmalloc. Targets: the adversarial gap (53×) and best-fit-level memory without its search cost
-- [ ] Re-check the ADR-007 realloc result under the new policy
-- [ ] Decide the default policy from the data; ADR-011
+- [x] Size-class design: classes plus a bitmap of non-empty classes; search from the request's class upward
+- [x] Implement it as a third policy (`SegregatedFit`), so first-fit and best-fit stay comparable
+- [x] Integrate the use-after-free hardening (per-class lists, the same validation)
+- [x] The whole test suite builds and runs under all three policies; mutation checks
+- [x] Footprint probe, timing and profile against first-fit, best-fit and libmalloc. Targets: the adversarial gap (53×) and best-fit-level memory without its search cost
+- [x] Re-check the ADR-007 realloc result under the new policy
+- [x] Decide the default policy from the data; ADR-011 (segregated fits became the default; timing re-run clean in Phase 17)
 
 ### Phase 14: Small-object slab fast path, Tier 2 (≈ 2 d), ADR-014
 Builds on Phase 13's size classes.

@@ -1,0 +1,9 @@
+adversarial_holes  --first-fit   mean=358.2 nodes visited per malloc: 286.7 
+adversarial_holes  --best-fit    mean=358.2 nodes visited per malloc: 286.7 
+adversarial_holes  --segregated  mean=358.2 nodes visited per malloc: 7.5 
+app_like           --first-fit   mean=1609.8 nodes visited per malloc: 2.0 
+app_like           --best-fit    mean=207.1 nodes visited per malloc: 57.2 
+app_like           --segregated  mean=224.3 nodes visited per malloc: 1.2 
+random_16B_64KiB   --first-fit   mean=854.7 nodes visited per malloc: 1.8 
+random_16B_64KiB   --best-fit    mean=353.6 nodes visited per malloc: 219.3 
+random_16B_64KiB   --segregated  mean=464.0 nodes visited per malloc: 5.7 

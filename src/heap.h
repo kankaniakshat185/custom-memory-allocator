@@ -35,14 +35,42 @@ struct FitResult {
     bool corrupt;   // a list node failed validation; nothing past it was read
 };
 
-// Fit policies (ADR-009). find() returns a free block of at least `need`
-// bytes and adds the number of list nodes it visited to `steps`. Every node is
-// passed to valid(node) before its size or links are read, so links
-// overwritten by a use-after-free are never followed (ADR-012).
+// Free-list heads, one per size bin, plus a bitmap of non-empty bins
+// (ADR-011). First-fit and best-fit use a single bin, so for them this is the
+// original single LIFO list.
+template <std::size_t N>
+struct FreeLists {
+    static constexpr std::size_t kWords = (N + 63) / 64;
+    Header* head[N] = {};
+    std::uint64_t nonempty[kWords] = {};
+
+    void mark(std::size_t b) { nonempty[b / 64] |= std::uint64_t{1} << (b % 64); }
+    void clear(std::size_t b) { nonempty[b / 64] &= ~(std::uint64_t{1} << (b % 64)); }
+    bool marked(std::size_t b) const { return (nonempty[b / 64] >> (b % 64)) & 1u; }
+    // Lowest non-empty bin >= b, or N if none.
+    std::size_t next_nonempty(std::size_t b) const {
+        for (std::size_t w = b / 64; w < kWords; ++w) {
+            std::uint64_t bits = nonempty[w];
+            if (w == b / 64) bits &= ~std::uint64_t{0} << (b % 64);
+            if (bits) return w * 64 + static_cast<std::size_t>(__builtin_ctzll(bits));
+        }
+        return N;
+    }
+};
+
+// Fit policies (ADR-009, ADR-011). Each declares its bin count and size->bin
+// map; find() returns a free block of at least `need` bytes and adds the
+// number of list nodes it visited to `steps`. Every node is passed to
+// valid(node) before its size or links are read, so links overwritten by a
+// use-after-free are never followed (ADR-012).
 struct FirstFit {
+    static constexpr std::size_t kBins = 1;
+    static constexpr std::size_t bin_of(std::size_t) { return 0; }
+
     template <class Valid>
-    static FitResult find(Header* head, std::size_t need, std::size_t& steps, Valid&& valid) {
-        for (Header* h = head; h; h = links(h)->next) {
+    static FitResult find(const FreeLists<kBins>& lists, std::size_t need, std::size_t& steps,
+                          Valid&& valid) {
+        for (Header* h = lists.head[0]; h; h = links(h)->next) {
             if (!valid(h)) return {nullptr, true};
             ++steps;
             if (block_size(h) >= need) return {h, false};
@@ -52,11 +80,15 @@ struct FirstFit {
 };
 
 struct BestFit {
+    static constexpr std::size_t kBins = 1;
+    static constexpr std::size_t bin_of(std::size_t) { return 0; }
+
     template <class Valid>
-    static FitResult find(Header* head, std::size_t need, std::size_t& steps, Valid&& valid) {
+    static FitResult find(const FreeLists<kBins>& lists, std::size_t need, std::size_t& steps,
+                          Valid&& valid) {
         Header* best = nullptr;
         std::size_t best_size = ~std::size_t{0};
-        for (Header* h = head; h; h = links(h)->next) {
+        for (Header* h = lists.head[0]; h; h = links(h)->next) {
             if (!valid(h)) return {nullptr, true};
             ++steps;
             const std::size_t sz = block_size(h);
@@ -70,8 +102,44 @@ struct BestFit {
     }
 };
 
+// Segregated fits (ADR-011): exact-size bins for blocks up to 1 KiB (one per
+// 16 B step), then power-of-two range bins. A request scans its own bin
+// first-fit (any block in an exact bin fits); if nothing there fits, the
+// bitmap finds the next non-empty larger bin, whose every block fits, so the
+// search never visits blocks of a smaller size class.
+struct SegregatedFit {
+    static constexpr std::size_t kExactMax = 1024;
+    static constexpr std::size_t kExactBins = (kExactMax - kMinBlock) / kAlign + 1;  // 63
+    static constexpr std::size_t kBins = 128;
+
+    static constexpr std::size_t bin_of(std::size_t size) {
+        if (size <= kExactMax) return (size - kMinBlock) / kAlign;
+        const std::size_t log2 = 63 - static_cast<std::size_t>(__builtin_clzll(size));  // >= 10
+        const std::size_t b = kExactBins + (log2 - 10);
+        return b < kBins ? b : kBins - 1;
+    }
+
+    template <class Valid>
+    static FitResult find(const FreeLists<kBins>& lists, std::size_t need, std::size_t& steps,
+                          Valid&& valid) {
+        const std::size_t b = bin_of(need);
+        for (Header* h = lists.head[b]; h; h = links(h)->next) {
+            if (!valid(h)) return {nullptr, true};
+            ++steps;
+            if (block_size(h) >= need) return {h, false};
+        }
+        const std::size_t next = lists.next_nonempty(b + 1);
+        if (next == kBins) return {nullptr, false};
+        Header* h = lists.head[next];
+        if (!valid(h)) return {nullptr, true};
+        ++steps;
+        return {h, false};  // every block in a larger bin is larger than `need`
+    }
+};
+
 // Lets code built against both old and new trees detect the policy API.
 #define MYALLOC_HAS_FIT_POLICIES 1
+#define MYALLOC_HAS_SEGREGATED_FIT 1
 
 // Explicit doubly-linked free list, LIFO insert (ADR-002), fit policy chosen
 // at compile time (ADR-009). The arena starts as one free block followed by a
@@ -138,23 +206,28 @@ private:
     Arena arena_;
     std::uint8_t* first_ = nullptr;     // first block header (base + 8)
     std::uint8_t* epilogue_ = nullptr;  // zero-size allocated header at arena end - 8
-    Header* free_head_ = nullptr;
+    FreeLists<Fit::kBins> lists_;
     HeapStats stats_;
     bool corrupt_ = false;
 };
 
 extern template class BasicHeap<FirstFit>;
 extern template class BasicHeap<BestFit>;
+extern template class BasicHeap<SegregatedFit>;
 
 using FirstFitHeap = BasicHeap<FirstFit>;
 using BestFitHeap = BasicHeap<BestFit>;
+using SegregatedFitHeap = BasicHeap<SegregatedFit>;
 
-// The default policy. Building with MYALLOC_BEST_FIT switches it, including
-// for the my_* C API; the test suite is built once per policy (ADR-009).
-#ifdef MYALLOC_BEST_FIT
+// The default policy is segregated fits (ADR-011). MYALLOC_FIRST_FIT or
+// MYALLOC_BEST_FIT switches it, including for the my_* C API; the test suite
+// is built once per policy.
+#if defined(MYALLOC_FIRST_FIT)
+using Heap = FirstFitHeap;
+#elif defined(MYALLOC_BEST_FIT)
 using Heap = BestFitHeap;
 #else
-using Heap = FirstFitHeap;
+using Heap = SegregatedFitHeap;
 #endif
 
 // Process-wide heap behind the my_* C API (256 MiB, lazily created).

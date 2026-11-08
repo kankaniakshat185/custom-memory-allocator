@@ -2,7 +2,7 @@
 
 <p align="center"><a href="https://github.com/kankaniakshat185/custom-memory-allocator/actions/workflows/ci.yml"><img src="https://github.com/kankaniakshat185/custom-memory-allocator/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
 
-A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_realloc` and `my_calloc` on one `mmap`'d arena. It uses an explicit free list, block splitting, O(1) boundary-tag coalescing, first-fit and best-fit policies chosen at compile time, and hardening against use-after-free writes. Single-threaded by design (see Limitations & Non-Goals below). Every performance claim here rests on three things:
+A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_realloc` and `my_calloc` on one `mmap`'d arena. It uses an explicit free list, block splitting, O(1) boundary-tag coalescing, segregated size-class free lists (the default; first-fit and best-fit are compile-time alternatives), and hardening against use-after-free writes. Single-threaded by design (see Limitations & Non-Goals below). Every performance claim here rests on three things:
 - a heap invariant checker that passes after every operation of the stress tests;
 - deterministic footprint measurements;
 - real hardware counters from Apple Instruments, not just a wall-clock number.
@@ -20,13 +20,13 @@ A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_reallo
 *   **Free-list design.** The free list is explicit, intrusive and doubly linked: `next`/`prev` live inside free blocks, with no separate bookkeeping structure. Headers are 8 B, payloads 16 B-aligned, blocks at least 32 B.
 *   **Splitting and coalescing.** Oversized free blocks are split on allocation. Coalescing is O(1) in both directions, using size-only footers on free blocks plus a prev-allocated header bit, so allocated blocks carry no footer at all.
 *   **`realloc` and `calloc`.** `realloc` shrinks in place, grows in place into a free successor, and otherwise moves. A failed `realloc` leaves the original block valid and untouched. `calloc` checks the size multiplication for overflow.
-*   **Two fit policies behind one template.** `BasicHeap<FirstFit>` (the default) and `BasicHeap<BestFit>` share every line of code except the search, chosen at compile time with no runtime branch.
+*   **Three fit policies behind one template.** `BasicHeap<SegregatedFit>` (the default: exact-size bins up to 1 KiB, power-of-two bins above, a bitmap to find the next non-empty bin), `BasicHeap<FirstFit>` and `BasicHeap<BestFit>` share every line of code except the bins and the search. The policy is chosen at compile time with no runtime branch.
 *   **Use-after-free hardening.** A write through a dangling pointer can never make the allocator read outside its arena or loop forever. Free-list links are validated before being followed, unlinking checks both neighbours first, and walks are bounded. Detected corruption stops the heap with a clear diagnostic instead of a segfault later.
 *   **Allocation tracking and leak reporting.** `my_alloc_stats()` returns bytes and blocks in use, peak, free space and fragmentation in O(1); `my_report_leaks()` lists every live block; `MYALLOC_LEAK_REPORT=1` prints that report at exit. No cost on the hot path.
 *   **Strict checks at the API boundary.** Double frees, pointers outside the arena, misaligned pointers and requests too large for the arena (including `calloc` overflow) are rejected. Bad frees abort with a named diagnostic; oversized requests return `NULL`.
-*   **216 test runs.** 108 tests, built twice (once per fit policy). They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan. The allocator core has 99.7% line and 100% function coverage.
+*   **324 test runs.** 108 tests, built three times (once per fit policy). They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan. The allocator core has 99.7% line and 100% function coverage.
 *   **The checks are themselves tested.** 11 deliberate mutations (an invariant, a merge, a hardening check broken on purpose) each confirmed that a test fails, except one, which showed a hardening check was redundant; it was removed.
-*   **7-job CI pipeline** (GitHub Actions) on every push: a blocking format check, sanitized builds and all 216 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
+*   **7-job CI pipeline** (GitHub Actions) on every push: a blocking format check, sanitized builds and all 324 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
 *   **Measured, not argued.** Deterministic footprint measurements and a trace-replay timing harness compare against the macOS system allocator, with its small-object fast path as a control. Instruments profiles (Time Profiler attributed through inlining, plus the CPU Counters bottleneck breakdown) explain *why* the numbers look the way they do.
 
 ## System Architecture
@@ -58,7 +58,7 @@ header word = block size (multiple of 16) | alloc bit | prev-alloc bit
 | :--- | :--- |
 | Language | C++17 |
 | Build System | CMake, with GoogleTest v1.17.0 fetched via `FetchContent`; arm64 forced on Apple Silicon |
-| Testing | GoogleTest: 108 tests across 11 files, built once per fit policy (216 runs) |
+| Testing | GoogleTest: 108 tests across 11 files, built once per fit policy (324 runs) |
 | Sanitizers | AddressSanitizer + UndefinedBehaviorSanitizer (`MYALLOC_ASAN`, `MYALLOC_UBSAN`) |
 | Coverage | clang source-based coverage (`llvm-cov`): allocator core 99.7% lines, 100% functions |
 | Benchmarking | Custom trace-replay wall-clock harness (batch timing, median + IQR over 15 reps) and a deterministic footprint probe |
@@ -98,7 +98,7 @@ Four decisions from the [Architecture Decision Log](docs/README.md) that shaped 
 
 **Result**: Under best-fit the gap shrank from 2.1× to **1.01×**. The bloat was an interaction with LIFO first-fit, not a property of in-place `realloc`, which stayed, and is 1.2× faster than always-move. The same experiment confirmed why app-like utilisation was only 0.310 under first-fit: best-fit reaches **0.849**.
 
-**Tradeoff**: Best-fit pays for that memory with a full-list scan: 57–219 nodes visited per malloc vs. ~2 for first-fit, which makes it 3–13× slower. First-fit stays the default; size-segregated lists are the structural fix. See [ADR-007](docs/adr/007-realloc-and-calloc.md) and [ADR-009](docs/adr/009-first-fit-vs-best-fit.md).
+**Tradeoff**: Best-fit pays for that memory with a full-list scan: 57–219 nodes visited per malloc vs. ~2 for first-fit, which makes it 3–13× slower. First-fit stayed the default until the structural fix, size-segregated lists, was built and measured; it became the default in [ADR-011](docs/adr/011-segregated-free-lists.md). See [ADR-007](docs/adr/007-realloc-and-calloc.md) and [ADR-009](docs/adr/009-first-fit-vs-best-fit.md).
 
 ### 4. Hardening Tuned by Measurement, Not Guesswork
 
@@ -148,10 +148,11 @@ The allocator was built one variable at a time, and each phase was verified by t
 *   **Phase 2, splitting:** internal overhead 3.83–7.00× → **1.00–1.02×**. But with no coalescing, out-of-memory failures rose **0 → 9,293** on random sizes, the free list shredded into 107,655 pieces, and **the phase could not finish a timing run in 80 minutes**. Splitting without merging is a measured regression, kept on purpose so the next phase's effect is attributable ([ADR-005](docs/adr/005-splitting.md)).
 *   **Phase 3, coalescing:** out-of-memory failures **0 on every workload**. Utilisation on random sizes 0.099 → **0.615**, on phase shift 0.134 → **0.997**. The adversarial workload is **2.9× faster than Phase 1**, because its free list stays at 358 blocks instead of growing to 3,000+. Coalescing costs ~0.8 ns/op against Phase 1 on random sizes and cuts the batch p99 from 95 to 26 ns ([ADR-006](docs/adr/006-coalescing.md)).
 *   **Phase 4, `realloc`/`calloc`:** the allocation paths were refactored into shared `place()`/`release()` helpers, with byte-identical footprint output, and timing is unchanged within noise. In-place `realloc` is **1.2× faster than always-move** ([ADR-007](docs/adr/007-realloc-and-calloc.md)).
-*   **Phase 6, best-fit variant:** **2.7× less memory on app-like** (utilisation 0.310 → 0.849), but **12.8× slower on random sizes**. First-fit visits ~2 free blocks per malloc and best-fit 57–219. First-fit stays the default ([ADR-009](docs/adr/009-first-fit-vs-best-fit.md)).
-*   **Hardened (current):** use-after-free safety for **+28% on first-fit** typical workloads and **+1% on adversarial**, with byte-identical footprint ([ADR-012](docs/adr/012-use-after-free-hardening.md)).
+*   **Phase 6, best-fit variant:** **2.7× less memory on app-like** (utilisation 0.310 → 0.849), but **12.8× slower on random sizes**. First-fit visits ~2 free blocks per malloc and best-fit 57–219. First-fit stayed the default at the time ([ADR-009](docs/adr/009-first-fit-vs-best-fit.md)); segregated fits replaced it in Phase 13.
+*   **Phase 13, segregated free lists (now the default):** the worst case is **42× faster than first-fit** (16.5 vs. 694 ns/op), within 1.3× of libmalloc instead of 53×. App-like is 29% faster and realloc 1.8× faster than first-fit, with **2.3× less memory** on app-like. Random sizes are 8.6% slower (range bins are walked). The gain on app-like comes from 6.7× fewer split/merge cycles, not from faster search. Measured in one run on a loaded machine; the tables and charts below are refreshed in Phase 17 ([ADR-011](docs/adr/011-segregated-free-lists.md)).
+*   **Hardened:** use-after-free safety for **+28% on first-fit** typical workloads and **+1% on adversarial**, with byte-identical footprint ([ADR-012](docs/adr/012-use-after-free-hardening.md)).
 
-All versions measured back-to-back in one invocation of `bench/scripts/run_phases.sh` (first-fit; median ns/op; IQR ≤ 5.6% except where marked; [data](docs/results/final/timing-summary.md)):
+All versions measured back-to-back in one invocation of `bench/scripts/run_phases.sh` (v1.0 final run, before ADR-011, so every column is first-fit; median ns/op; IQR ≤ 5.6% except where marked; [data](docs/results/final/timing-summary.md)):
 
 | Workload | Phase 1 | Phase 2 | Phase 3 | Phase 4 | Phase 6 | **Hardened** |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -192,6 +193,8 @@ Memory (deterministic footprint probe; utilisation = peak live bytes ÷ arena hi
   <img alt="Bar charts per workload comparing libmalloc, libmalloc with Nano off, first-fit and best-fit; values as in the table above" src="docs/results/charts/vs-libmalloc-light.png">
 </picture>
 
+These are first-fit numbers from the v1.0 final run. With segregated fits, now the default, the same comparison gives (one run on a loaded machine, ADR-011): random 1.29× faster than libmalloc, **app-like 1.21× faster**, adversarial 1.26× slower (was 53×), realloc 1.89× faster.
+
 libmalloc is thread-safe and pays for it, while this allocator is single-threaded. Part of any lead here is that, not better design.
 
 ## Bottlenecks
@@ -203,10 +206,10 @@ libmalloc is thread-safe and pays for it, while this allocator is single-threade
 
 What still limits this allocator, as measured, not guessed at ([ADR-010](docs/adr/010-profiling-findings.md)):
 
-*   **The free path, not the search, dominates typical workloads.** `release` plus unlinking take ~51% of the time; the free-list search ~10%. LIFO first-fit visits only ~2 of the 855–1,610 free blocks per malloc.
+*   **The free path, not the search, dominates typical workloads.** `release` plus unlinking take ~51% of the time; the free-list search ~10%. LIFO first-fit visits only ~2 of the 855–1,610 free blocks per malloc. Segregated fits attacked exactly this cost: exact-size reuse cuts split/merge churn 6.7× on app-like (ADR-011).
 *   **Branch mis-speculation.** ~37–52% of pipeline slots are discarded on random-size workloads: every operation is ~50 cycles of data-dependent decisions. This includes the harness's own unpredictable alloc/free dispatch; the counter samples can't separate the two.
-*   **No small-object fast path.** That is why libmalloc wins app-like by 14%: with its Nano zone off they are level.
-*   **One free list.** The adversarial workload is 98% search and 80% stalled on memory: a pointer chase through 2,000 cold holes per request, which size-segregated lists would never visit. That is 53× slower than libmalloc.
+*   **No small-object fast path yet.** Under first-fit, libmalloc won app-like by 14% (level with its Nano zone off). Segregated fits' exact bins now put the heap 1.21× ahead there, even without a slab.
+*   **Range-bin walks.** Segregated fits removed the 53× worst case (the walk through 2,000 holes of the wrong size; now 1.26× of libmalloc). Sizes above 1 KiB still share power-of-two bins that are walked first-fit, so random sizes are 8.6% slower than first-fit, with search at 30% of the time. Two-level bins are the targeted fix (ADR-011).
 *   **Measurement limits.** Cross-run drift is up to ~10%, so only same-run comparisons are trusted. The ~41.7 ns timer means per-call latency isn't observable, only 1,024-op batches. There is no core pinning on macOS.
 
 ## Limitations & Non-Goals
@@ -215,14 +218,14 @@ These are scope boundaries, not oversights (see [docs/plan.md](docs/plan.md)):
 
 *   **Single-threaded.** No locks or per-thread caches. The code contains no concurrency primitive at all.
 *   **One fixed 256 MiB arena behind the C API.** It never grows, and freed memory is never returned to the OS.
-*   **No size-segregated free lists or small-object slab.** These are the two structural fixes the measurements point at, held as stretch goals.
+*   **No small-object slab** (size-class rounding) and **single-level range bins**: the next measured steps (task list Phase 14; ADR-011 Alternative 2).
 *   **Use-after-free hardening guarantees memory safety and termination, not detection**, and is not a defence against a deliberate attacker. Free-list pointers aren't mangled or checksummed.
 *   **Not a drop-in system `malloc`.** No `operator new` hook or symbol interposition.
 *   **One machine, one baseline.** Measured on an Apple M2 against macOS libmalloc only; glibc was not measured.
 
 ## Testing
 
-108 tests across 11 files, each built twice: `myalloc_tests` (first-fit) and `myalloc_tests_bestfit` (best-fit as the default, C API included), so **216 runs**.
+108 tests across 11 files, each built three times: `myalloc_tests` (segregated fits, the default), `myalloc_tests_firstfit` and `myalloc_tests_bestfit` (that policy as the default, C API included), so **324 runs**.
 
 *   **Unit tests:** alloc/free and reuse order, split arithmetic and thresholds, merges in each direction, prev-alloc bit maintenance, every `realloc` path (shrink, grow in place, move, failure leaves the original intact), `calloc` zeroing and overflow, alignment for every size 0–600, fit-policy choices with exact search-step counts.
 *   **Randomised stress:** seeded alloc/free/realloc mixes with the heap invariant checker after **every** operation and fill patterns verified before every free. One configuration uses a 64 KiB arena to keep the out-of-memory path constantly exercised. Every seed must end with the arena back to one free block.
@@ -231,7 +234,7 @@ These are scope boundaries, not oversights (see [docs/plan.md](docs/plan.md)):
 *   **Tracking:** the heap walk visits exactly the live blocks in address order and stops safely at a damaged header; C API stats deltas and peak; the leak report's exact output; the at-exit report checked in forked children with the variable set and unset.
 *   **Mutation checks:** 11 deliberate breakages of invariants, merges, `realloc` and the hardening checks, each confirming that a test fails, except the one that exposed a redundant check (see [ADR-004](docs/adr/004-verification-strategy.md), [ADR-012](docs/adr/012-use-after-free-hardening.md)).
 
-All 216 runs pass under UBSan and under ASan + UBSan.
+All 324 runs pass under UBSan and under ASan + UBSan.
 
 **Coverage** (clang source-based, both binaries merged): allocator core 99.7% lines, 100% functions, 86.3% branches. Including the C API glue, 97.1% lines and 100% functions. The uncovered glue lines are abort diagnostics, which death tests do execute, but in child processes that `abort()` before writing profile data ([report](docs/results/coverage.md)).
 
@@ -260,7 +263,7 @@ cmake --build build-asan -j && ctest --test-dir build-asan
 
 # Release tools
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
-./build/footprint_probe                   # memory metrics, first-fit (add --best-fit)
+./build/footprint_probe                   # memory metrics, first-fit (add --best-fit or --segregated)
 ./build/footprint_probe realloc           # realloc policy comparison
 ./build/freelist_length app_like          # free-list length and nodes visited per malloc
 
@@ -305,14 +308,14 @@ docs/adr/         # architecture decision records 001-012
 docs/results/     # raw CSVs, summaries, machine state per run, profiles, coverage
 ```
 
-`BasicHeap` (in `src/heap.h`) is templated on the fit policy, so first-fit and best-fit are the same class instantiated twice. The benchmark scripts build *older phase commits* from `git archive` against the current harness, so every phase can be re-measured at any time.
+`BasicHeap` (in `src/heap.h`) is templated on the fit policy, so segregated fits, first-fit and best-fit are the same class instantiated three times. The benchmark scripts build *older phase commits* from `git archive` against the current harness, so every phase can be re-measured at any time.
 
 ## Documentation
 
 The full writeup lives in [`docs/`](docs/):
 
 *   [Project plan](docs/plan.md): scope, phases, budget, exit criteria
-*   [Architecture Decision Log](docs/README.md): 12 ADRs (001–010, 012, 013), each with alternatives considered and measured before/after numbers
+*   [Architecture Decision Log](docs/README.md): 13 ADRs (001–013), each with alternatives considered and measured before/after numbers
 *   [Testing strategy](docs/testing.md)
 *   [Environment](docs/environment.md): machine, toolchain, and the toolchain incidents found along the way
 *   [Results](docs/results/): every CSV behind every number in this README, with the machine state at the time

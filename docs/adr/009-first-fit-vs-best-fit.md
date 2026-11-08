@@ -1,6 +1,6 @@
 # ADR-009: Fit policy — first-fit vs. best-fit, chosen at compile time
 
-- Status: Accepted. First-fit stays the default; best-fit available via `MYALLOC_BEST_FIT` / `myalloc::BestFitHeap`.
+- Status: Accepted; **the default-policy part is superseded by [ADR-011](011-segregated-free-lists.md)** (segregated fits are now the default). First-fit and best-fit remain available (`MYALLOC_FIRST_FIT`, `MYALLOC_BEST_FIT`).
 - Date: 2026-10-25
 - Environment: see [../environment.md](../environment.md); native arm64, `-O3`. Machine state: [results/phase6/timing-machine-state.txt](../results/phase6/timing-machine-state.txt)
 - Raw data: [results/phase6/](../results/phase6/) (footprint, realloc probe and timing for both policies, plus [timing-summary.md](../results/phase6/timing-summary.md))

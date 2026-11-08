@@ -100,7 +100,8 @@ def symbolize(binary_path, load, addrs):
 
 # First match wins, scanning the inlined chain from innermost outwards.
 CATEGORIES = [
-    ("search: walk + per-node check", ("FirstFit::find", "BestFit::find", "in_heap", "find_fit", "find_first_fit")),
+    ("search: walk + per-node check", ("FirstFit::find", "BestFit::find", "SegregatedFit::find", "next_nonempty", "in_heap", "find_fit", "find_first_fit")),
+    ("bin index + bitmap (list push/unlink)", ("bin_of", "FreeLists::mark", "FreeLists::clear", "mark", "clear")),
     ("unlink: safe-unlinking checks", ("unlinkable", "plausible_free")),
     ("unlink: relink neighbours", ("unlink", "list_remove")),
     ("free: merge (release)", ("release", "prev_block", "write_footer")),

@@ -28,3 +28,9 @@ constexpr bool kBestFit = true;
 #else
 constexpr bool kBestFit = false;
 #endif
+#ifdef MYALLOC_FIRST_FIT
+constexpr bool kFirstFit = true;
+#else
+constexpr bool kFirstFit = false;
+#endif
+constexpr bool kSegregatedFit = !kBestFit && !kFirstFit;  // the default policy

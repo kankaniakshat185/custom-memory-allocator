@@ -41,12 +41,17 @@ endif()
 
 set(MYALLOC_SOURCES src/arena.cpp src/heap.cpp src/myalloc.cpp)
 
-# Default library: first-fit behind myalloc::Heap and the my_* C API.
+# Default library: segregated fits (ADR-011) behind myalloc::Heap and the
+# my_* C API.
 add_library(myalloc ${MYALLOC_SOURCES})
 target_include_directories(myalloc PUBLIC include PRIVATE src)
 
-# Same sources with best-fit as the default policy (ADR-009), so the whole test
-# suite, C API included, also runs against best-fit.
+# Same sources with first-fit and best-fit as the default policy (ADR-009), so
+# the whole test suite, C API included, runs against every policy.
+add_library(myalloc_firstfit ${MYALLOC_SOURCES})
+target_include_directories(myalloc_firstfit PUBLIC include PRIVATE src)
+target_compile_definitions(myalloc_firstfit PUBLIC MYALLOC_FIRST_FIT)
+
 add_library(myalloc_bestfit ${MYALLOC_SOURCES})
 target_include_directories(myalloc_bestfit PUBLIC include PRIVATE src)
 target_compile_definitions(myalloc_bestfit PUBLIC MYALLOC_BEST_FIT)
@@ -76,7 +81,12 @@ include(GoogleTest)
 add_executable(myalloc_tests ${MYALLOC_TEST_SOURCES})
 target_link_libraries(myalloc_tests PRIVATE myalloc GTest::gtest_main)
 target_include_directories(myalloc_tests PRIVATE src)
-gtest_discover_tests(myalloc_tests TEST_PREFIX "firstfit.")
+gtest_discover_tests(myalloc_tests TEST_PREFIX "segfit.")
+
+add_executable(myalloc_tests_firstfit ${MYALLOC_TEST_SOURCES})
+target_link_libraries(myalloc_tests_firstfit PRIVATE myalloc_firstfit GTest::gtest_main)
+target_include_directories(myalloc_tests_firstfit PRIVATE src)
+gtest_discover_tests(myalloc_tests_firstfit TEST_PREFIX "firstfit.")
 
 add_executable(myalloc_tests_bestfit ${MYALLOC_TEST_SOURCES})
 target_link_libraries(myalloc_tests_bestfit PRIVATE myalloc_bestfit GTest::gtest_main)

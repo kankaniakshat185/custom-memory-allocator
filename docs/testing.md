@@ -2,7 +2,7 @@
 
 Run: `cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_UBSAN=ON && cmake --build build-test -j && ctest --test-dir build-test --output-on-failure`
 
-The suite is built twice: `myalloc_tests` (first-fit, ctest prefix `firstfit.`) and `myalloc_tests_bestfit` (best-fit as the default policy, prefix `bestfit.`), so every test, C API included, runs under both fit policies (ADR-009).
+The suite is built three times: `myalloc_tests` (segregated fits, the default; ctest prefix `segfit.`), `myalloc_tests_firstfit` (prefix `firstfit.`) and `myalloc_tests_bestfit` (prefix `bestfit.`), so every test, C API included, runs under every fit policy (ADR-009, ADR-011).
 
 | Level | Files | What it covers |
 |---|---|---|

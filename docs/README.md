@@ -20,8 +20,8 @@
 | [006](adr/006-coalescing.md) | Coalescing with boundary tags and prev-allocated bit | Accepted (footprint + timing measured) |
 | [007](adr/007-realloc-and-calloc.md) | realloc (in place where possible) and calloc | Accepted (resolved by 009) |
 | [008](adr/008-benchmark-methodology.md) | Benchmark methodology: trace replay, batch timing, controlled libmalloc baseline | Accepted (native arm64 results) |
-| [009](adr/009-first-fit-vs-best-fit.md) | Fit policy: first-fit vs. best-fit, compile-time | Accepted (first-fit default) |
+| [009](adr/009-first-fit-vs-best-fit.md) | Fit policy: first-fit vs. best-fit, compile-time | Accepted (default superseded by 011) |
 | [010](adr/010-profiling-findings.md) | Profiling findings: where the time goes and why (Time Profiler + CPU Counters) | Accepted |
-| 011 | Segregated size-class free lists | Planned: Phase 13 of the [post-v1.0 task list](plan.md#10-post-v10-task-list-tier-2-and-loose-ends) (motivated by 009 + 010: memory and worst case, not average speed) |
+| [011](adr/011-segregated-free-lists.md) | Segregated size-class free lists, now the default policy | Accepted (timing re-run clean in Phase 17) |
 | [012](adr/012-use-after-free-hardening.md) | Use-after-free hardening: validated links, safe unlinking, fail-stop | Accepted |
 | [013](adr/013-allocation-tracking-and-leak-report.md) | Allocation tracking and leak report: O(1) stats, heap-walk report, opt-in at-exit report | Accepted |

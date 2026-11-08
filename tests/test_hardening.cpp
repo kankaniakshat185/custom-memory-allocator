@@ -25,11 +25,17 @@ class Hardening : public ::testing::Test {
 protected:
     void SetUp() override { ASSERT_TRUE(h.init(1u << 20)); }
 
-    // [a 300 B][guard][b 100 B][guard], both freed: list is b, a, tail.
+    // [a 1500 B][guard][b 1100 B][guard], both freed, so b is the head of the
+    // list a request walks. a and b are in the same size class under every
+    // policy (one list for first/best-fit; the 1-2 KiB range bin for
+    // segregated fits), so a kRequest-byte request (b too small, a big enough)
+    // must read b's links before reaching a, whatever the policy.
+    static constexpr std::size_t kRequest = 1400;
+    static constexpr std::size_t kTooBig = 1900;  // fits neither a nor b
     void two_holes() {
-        a = h.malloc(300);
+        a = h.malloc(1500);
         h.malloc(16);
-        b = h.malloc(100);
+        b = h.malloc(1100);
         h.malloc(16);
         ASSERT_TRUE(a && b);
         h.free(a);
@@ -56,10 +62,10 @@ protected:
 }  // namespace
 
 TEST_F(Hardening, GarbageNextLinkIsDetectedNotFollowed) {
-    // The exact sequence that segfaulted before ADR-012.
+    // The failure mode that segfaulted before ADR-012.
     two_holes();
     uaf_write(b, 0, 0x4141414141414141ull);  // b.next
-    EXPECT_EQ(h.malloc(5000), nullptr);      // walk reaches b, b does not fit, b.next is garbage
+    EXPECT_EQ(h.malloc(kRequest), nullptr);  // b does not fit, so the walk would follow b.next
     expect_corrupted_and_inert();
 }
 
@@ -67,7 +73,7 @@ TEST_F(Hardening, NextLinkToAllocatedBlockIsDetected) {
     void* live = h.malloc(40);  // allocated before the holes, so not carved from b
     two_holes();
     uaf_write(b, 0, addr(myalloc::header_of(live)));
-    EXPECT_EQ(h.malloc(5000), nullptr);
+    EXPECT_EQ(h.malloc(kRequest), nullptr);
     expect_corrupted_and_inert();
 }
 
@@ -75,42 +81,42 @@ TEST_F(Hardening, NextLinkOutsideArenaIsDetected) {
     two_holes();
     int on_stack = 0;
     uaf_write(b, 0, addr(&on_stack));
-    EXPECT_EQ(h.malloc(5000), nullptr);
+    EXPECT_EQ(h.malloc(kRequest), nullptr);
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, MisalignedNextLinkInsideHeapIsDetected) {
     two_holes();
     uaf_write(b, 0, addr(myalloc::header_of(a)) + 8);
-    EXPECT_EQ(h.malloc(5000), nullptr);
+    EXPECT_EQ(h.malloc(kRequest), nullptr);
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, BrokenBackLinkOfChosenBlockIsDetectedOnUnlink) {
-    two_holes();                        // list: b(112), a(304), tail
-    uaf_write(a, 8, 0x1234);            // a.prev should be b
-    EXPECT_EQ(h.malloc(200), nullptr);  // search picks a; unlinking a checks a.prev first
+    two_holes();                             // list: b, a
+    uaf_write(a, 8, 0x1234);                 // a.prev should be b
+    EXPECT_EQ(h.malloc(kRequest), nullptr);  // search picks a; unlinking a checks a.prev first
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, BrokenNeighbourLinkIsDetectedOnUnlink) {
-    two_holes();                        // list: b, a, tail
-    uaf_write(a, 8, 0x4242);            // a.prev should be b
-    EXPECT_EQ(h.malloc(100), nullptr);  // b fits at once; unlinking b rewrites a.prev,
-    expect_corrupted_and_inert();       // so safe unlinking checks it first
+    two_holes();                         // list: b, a
+    uaf_write(a, 8, 0x4242);             // a.prev should be b
+    EXPECT_EQ(h.malloc(1100), nullptr);  // b fits at once; unlinking b rewrites a.prev,
+    expect_corrupted_and_inert();        // so safe unlinking checks it first
 }
 
 TEST_F(Hardening, SelfLoopIsDetected) {
     two_holes();
     uaf_write(b, 0, addr(myalloc::header_of(b)));  // b.next = b
-    EXPECT_EQ(h.malloc(5000), nullptr);            // must terminate
+    EXPECT_EQ(h.malloc(kTooBig), nullptr);         // must terminate
     expect_corrupted_and_inert();
 }
 
 TEST_F(Hardening, TwoNodeCycleIsDetected) {
-    two_holes();                                   // list: b, a, tail
+    two_holes();                                   // list: b, a
     uaf_write(a, 0, addr(myalloc::header_of(b)));  // a.next = b
-    EXPECT_EQ(h.malloc(5000), nullptr);            // must terminate
+    EXPECT_EQ(h.malloc(kTooBig), nullptr);         // neither fits, so only the bound stops it
     expect_corrupted_and_inert();
 }
 
@@ -220,12 +226,12 @@ TEST(HardeningApi, CApiAbortsWithDiagnosticInsteadOfCrashing) {
     // process-wide heap of this test binary is never corrupted.
     EXPECT_DEATH(
         {
-            void* a = my_malloc(100);
+            void* a = my_malloc(1100);  // same size class as the request below
             void* guard = my_malloc(16);
             (void)guard;
             my_free(a);
             uaf_write(a, 0, 0x4141414141414141ull);
-            my_malloc(5000);
+            my_malloc(1400);
         },
         "my_malloc: heap corruption detected");
     EXPECT_FALSE(myalloc::default_heap().corrupted());

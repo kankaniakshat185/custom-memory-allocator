@@ -1,0 +1,10 @@
+# Splits per malloc and merges per free, first-fit vs segregated fits (ADR-011)
+# Measured 2026-11-08 with a scratch copy of src/ instrumented with counters in place() and
+# release() (not committed: the counters would add hot-path stores), replaying the benchmark
+# traces (bench/workloads.cpp). Deterministic.
+random_16B_64KiB       first-fit  splits/malloc=1.00 merges/free=1.00 (next 0.50, prev 0.50)
+random_16B_64KiB       segregated splits/malloc=0.54 merges/free=0.54 (next 0.27, prev 0.27)
+app_like               first-fit  splits/malloc=0.94 merges/free=0.94 (next 0.47, prev 0.47)
+app_like               segregated splits/malloc=0.14 merges/free=0.14 (next 0.07, prev 0.07)
+adversarial_holes      first-fit  splits/malloc=0.86 merges/free=0.86 (next 0.43, prev 0.43)
+adversarial_holes      segregated splits/malloc=0.86 merges/free=0.86 (next 0.43, prev 0.43)

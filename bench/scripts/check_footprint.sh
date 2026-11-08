@@ -3,8 +3,9 @@
 # must match the committed reference CSVs byte for byte. A difference means a
 # change altered placement decisions (which block a request gets), which must
 # be intentional and re-recorded in an ADR.
-# References: the Phase 6 probe results (ADR-009); ADR-012 verified that the
-# use-after-free hardening left them byte-identical.
+# References: the Phase 6 probe results (ADR-009; ADR-012 verified that the
+# use-after-free hardening left them byte-identical) and the segregated-fit
+# results (ADR-011).
 # Observed byte-identical on macOS arm64 (libc++, Apple clang) and on Linux
 # arm64 and x86_64 (libstdc++; GCC 13 and Clang 18; x86_64 in CI). The C++ standard does not guarantee identical random distributions
 # or libm results across libraries/platforms, so a mismatch on a *new*
@@ -28,4 +29,7 @@ check footprint-firstfit
 check footprint-bestfit --best-fit
 check realloc-firstfit realloc
 check realloc-bestfit realloc --best-fit
+ref=docs/results/segfit
+check footprint-segregated --segregated
+check realloc-segregated realloc --segregated
 exit $status

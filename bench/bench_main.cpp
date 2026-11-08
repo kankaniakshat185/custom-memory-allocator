@@ -8,7 +8,9 @@
 //
 // Usage: bench_timing [--label L] [--reps N] [--alloc a,b] [--workload w,x] [--raw FILE]
 //   allocators: system, heap, heap_naive_realloc, heap_growonly_realloc,
-//               heap_bestfit (trees with fit policies, ADR-009)
+//               heap_bestfit (trees with fit policies, ADR-009), heap_segfit and
+//               heap_firstfit (ADR-011). "heap" is the tree's default policy:
+//               first-fit up to Phase 12, segregated fits from Phase 13.
 //   MallocNanoZone=0 in the environment relabels "system" as "system_nano_off".
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -276,6 +278,14 @@ int main(int argc, char** argv) {
 #ifdef MYALLOC_HAS_FIT_POLICIES
             else if (a == "heap_bestfit")
                 report(o, a, t, run_heap<ReallocMode::Native, myalloc::BestFitHeap>(t, o.reps),
+                       raw);
+#endif
+#ifdef MYALLOC_HAS_SEGREGATED_FIT
+            else if (a == "heap_segfit")
+                report(o, a, t,
+                       run_heap<ReallocMode::Native, myalloc::SegregatedFitHeap>(t, o.reps), raw);
+            else if (a == "heap_firstfit")
+                report(o, a, t, run_heap<ReallocMode::Native, myalloc::FirstFitHeap>(t, o.reps),
                        raw);
 #endif
             else std::fprintf(stderr, "unknown allocator %s\n", a.c_str());

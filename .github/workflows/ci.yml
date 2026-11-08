@@ -1,5 +1,6 @@
-# CI for the allocator. Every job builds and runs both test binaries
-# (first-fit and best-fit as the default policy), so every test runs under both.
+# CI for the allocator. Every job builds and runs all three test binaries
+# (segregated fits = default, first-fit, best-fit), so every test runs under
+# every policy.
 name: CI
 
 on:
@@ -30,10 +31,10 @@ jobs:
         run: cmake -S . -B build-test -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_UBSAN=ON
       - name: Build
         run: cmake --build build-test -j 4
-      - name: Test (198 runs)
+      - name: Test (all policies)
         run: ctest --test-dir build-test --output-on-failure -j 4
       - name: Test binaries also pass when run directly (not isolated per test)
-        run: ./build-test/myalloc_tests && ./build-test/myalloc_tests_bestfit
+        run: ./build-test/myalloc_tests && ./build-test/myalloc_tests_firstfit && ./build-test/myalloc_tests_bestfit
 
   macos-asan:
     name: macOS · Debug + ASan + UBSan
@@ -102,16 +103,17 @@ jobs:
       - name: Configure
         run: cmake -S . -B build-cov -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
       - name: Build
-        run: cmake --build build-cov -j 4 --target myalloc_tests myalloc_tests_bestfit
+        run: cmake --build build-cov -j 4 --target myalloc_tests myalloc_tests_firstfit myalloc_tests_bestfit
       - name: Run tests with profiling
         run: |
-          for b in myalloc_tests myalloc_tests_bestfit; do
+          for b in myalloc_tests myalloc_tests_firstfit myalloc_tests_bestfit; do
             LLVM_PROFILE_FILE="cov-$b-%p.profraw" ./build-cov/$b
           done
       - name: Report
         run: |
           xcrun llvm-profdata merge -sparse cov-*.profraw -o cov.profdata
-          xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_tests_bestfit \
+          xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_tests_firstfit \
+            -object ./build-cov/myalloc_tests_bestfit \
             -instr-profile=cov.profdata src/ include/ | tee coverage.txt
           { echo '### Coverage'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

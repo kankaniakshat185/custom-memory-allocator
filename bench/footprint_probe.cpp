@@ -233,13 +233,15 @@ int run(bool realloc_mode) {
     return 0;
 }
 
-// Usage: footprint_probe [realloc] [--best-fit]
+// Usage: footprint_probe [realloc] [--best-fit | --segregated]
 int main(int argc, char** argv) {
-    bool realloc_mode = false, best_fit = false;
+    bool realloc_mode = false, best_fit = false, segregated = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "realloc") == 0) realloc_mode = true;
         else if (std::strcmp(argv[i], "--best-fit") == 0) best_fit = true;
+        else if (std::strcmp(argv[i], "--segregated") == 0) segregated = true;
     }
+    if (segregated) return run<myalloc::SegregatedFitHeap>(realloc_mode);
     return best_fit ? run<myalloc::BestFitHeap>(realloc_mode)
                     : run<myalloc::FirstFitHeap>(realloc_mode);
 }

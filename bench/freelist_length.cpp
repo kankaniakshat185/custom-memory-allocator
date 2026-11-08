@@ -3,7 +3,8 @@
 // trace (ADR-010). Uses only Heap API present in every phase
 // (init/malloc/free/stats().free_blocks), so run_phases-style builds of old
 // commits work.
-//   freelist_length <workload> [--best-fit]
+//   freelist_length <workload> [--first-fit | --best-fit | --segregated]
+// (default: the default policy, segregated fits since ADR-011)
 // Trees with fit policies (ADR-009) also report list nodes actually visited.
 #include <algorithm>
 #include <cstdio>
@@ -61,6 +62,10 @@ int main(int argc, char** argv) {
     const char* want = argc > 1 ? argv[1] : "adversarial_holes";
 #ifdef MYALLOC_HAS_FIT_POLICIES
     if (argc > 2 && std::strcmp(argv[2], "--best-fit") == 0) return run<myalloc::BestFitHeap>(want);
+    if (argc > 2 && std::strcmp(argv[2], "--segregated") == 0)
+        return run<myalloc::SegregatedFitHeap>(want);
+    if (argc > 2 && std::strcmp(argv[2], "--first-fit") == 0)
+        return run<myalloc::FirstFitHeap>(want);
 #endif
     return run<myalloc::Heap>(want);
 }

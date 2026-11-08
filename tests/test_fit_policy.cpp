@@ -96,4 +96,6 @@ TEST(FitPolicy, BuildUsesExpectedDefaultPolicy) {
     // Guards against the MYALLOC_BEST_FIT define not reaching this binary.
     EXPECT_EQ((std::is_same_v<myalloc::Heap, BestFitHeap>), kBestFit);
     EXPECT_EQ((std::is_same_v<decltype(myalloc::default_heap()), BestFitHeap&>), kBestFit);
+    EXPECT_EQ((std::is_same_v<myalloc::Heap, FirstFitHeap>), kFirstFit);
+    EXPECT_EQ((std::is_same_v<myalloc::Heap, myalloc::SegregatedFitHeap>), kSegregatedFit);
 }

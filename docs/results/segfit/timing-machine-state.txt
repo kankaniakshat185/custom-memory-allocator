@@ -1,0 +1,10 @@
+segfit timing run started 2026-11-07 19:42:54 from the Claude Code session
+19:42  up 13 days, 20:44, 3 users, load averages: 21.11 15.36 10.89
+Now drawing from 'Battery Power'
+ %CPU COMM
+ 93.5 /usr/sbin/BTLEServer
+ 63.4 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird
+ 40.4 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+ 32.8 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.
+finished 2026-11-07 19:43:22
+19:43  up 13 days, 20:44, 3 users, load averages: 18.58 15.32 11.01

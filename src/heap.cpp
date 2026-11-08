@@ -23,11 +23,13 @@ bool BasicHeap<Fit>::init(std::size_t arena_bytes) {
 
 template <class Fit>
 void BasicHeap<Fit>::list_push(Header* h) {
+    const std::size_t b = Fit::bin_of(block_size(h));
     FreeLinks* l = links(h);
     l->prev = nullptr;
-    l->next = free_head_;
-    if (free_head_) links(free_head_)->prev = h;
-    free_head_ = h;
+    l->next = lists_.head[b];
+    if (l->next) links(l->next)->prev = h;
+    lists_.head[b] = h;
+    lists_.mark(b);
     ++stats_.free_blocks;
 }
 
@@ -53,12 +55,15 @@ bool BasicHeap<Fit>::plausible_free(const Header* h) const {
 }
 
 // Safe unlinking: h and both neighbours must be plausible and point back at
-// each other before any link is rewritten.
+// each other before any link is rewritten. A list head must be the head of the
+// bin its size maps to; the size comes from h's header, which a use-after-free
+// write cannot reach.
 template <class Fit>
 bool BasicHeap<Fit>::unlinkable(Header* h) const {
     if (!plausible_free(h)) return false;
     const FreeLinks* l = links(h);
-    if (l->prev ? !(plausible_free(l->prev) && links(l->prev)->next == h) : free_head_ != h)
+    if (l->prev ? !(plausible_free(l->prev) && links(l->prev)->next == h)
+                : lists_.head[Fit::bin_of(block_size(h))] != h)
         return false;
     if (l->next && !(plausible_free(l->next) && links(l->next)->prev == h)) return false;
     return true;
@@ -67,8 +72,13 @@ bool BasicHeap<Fit>::unlinkable(Header* h) const {
 template <class Fit>
 void BasicHeap<Fit>::unlink(Header* h) {
     FreeLinks* l = links(h);
-    if (l->prev) links(l->prev)->next = l->next;
-    else free_head_ = l->next;
+    if (l->prev) {
+        links(l->prev)->next = l->next;
+    } else {
+        const std::size_t b = Fit::bin_of(block_size(h));
+        lists_.head[b] = l->next;
+        if (!l->next) lists_.clear(b);
+    }
     if (l->next) links(l->next)->prev = l->prev;
     --stats_.free_blocks;
 }
@@ -93,7 +103,7 @@ Header* BasicHeap<Fit>::find_fit(std::size_t need) {
     auto valid = [&](Header* h) {
         return ++visited <= stats_.free_blocks && in_heap(h) && !is_alloc(h);
     };
-    const FitResult r = Fit::find(free_head_, need, stats_.search_steps, valid);
+    const FitResult r = Fit::find(lists_, need, stats_.search_steps, valid);
     if (r.corrupt) mark_corrupt();
     return r.block;
 }
@@ -322,14 +332,19 @@ bool BasicHeap<Fit>::check(const char** why) const {
     if (in_use != stats_.bytes_in_use) return fail("bytes_in_use mismatch");
 
     std::size_t list_len = 0;
-    const Header* prev = nullptr;
-    for (Header* h = free_head_; h; h = links(h)->next) {
-        if (++list_len > walk_free) return fail("free list longer than free blocks (cycle?)");
-        auto* hp = reinterpret_cast<std::uint8_t*>(h);
-        if (hp < first_ || hp >= epilogue_) return fail("free list node outside heap");
-        if (is_alloc(h)) return fail("allocated block on free list");
-        if (links(h)->prev != prev) return fail("free list prev link broken");
-        prev = h;
+    for (std::size_t b = 0; b < Fit::kBins; ++b) {
+        if (lists_.marked(b) != (lists_.head[b] != nullptr))
+            return fail("non-empty-bin bitmap disagrees with bin");
+        const Header* prev = nullptr;
+        for (Header* h = lists_.head[b]; h; h = links(h)->next) {
+            if (++list_len > walk_free) return fail("free list longer than free blocks (cycle?)");
+            auto* hp = reinterpret_cast<std::uint8_t*>(h);
+            if (hp < first_ || hp >= epilogue_) return fail("free list node outside heap");
+            if (is_alloc(h)) return fail("allocated block on free list");
+            if (Fit::bin_of(block_size(h)) != b) return fail("free block in the wrong size bin");
+            if (links(h)->prev != prev) return fail("free list prev link broken");
+            prev = h;
+        }
     }
     if (list_len != walk_free) return fail("free list length != free blocks in heap");
     if (list_len != stats_.free_blocks) return fail("free_blocks stat mismatch");
@@ -340,17 +355,20 @@ template <class Fit>
 FreeSummary BasicHeap<Fit>::free_summary() const {
     FreeSummary s;
     // Bounded and validated like find_fit, so it is safe after corruption.
-    for (Header* h = free_head_; h && s.count < stats_.free_blocks && plausible_free(h);
-         h = links(h)->next) {
-        const std::size_t sz = block_size(h);
-        ++s.count;
-        s.bytes += sz;
-        if (sz > s.largest) s.largest = sz;
+    for (std::size_t b = 0; b < Fit::kBins; ++b) {
+        for (Header* h = lists_.head[b]; h && s.count < stats_.free_blocks && plausible_free(h);
+             h = links(h)->next) {
+            const std::size_t sz = block_size(h);
+            ++s.count;
+            s.bytes += sz;
+            if (sz > s.largest) s.largest = sz;
+        }
     }
     return s;
 }
 
 template class BasicHeap<FirstFit>;
 template class BasicHeap<BestFit>;
+template class BasicHeap<SegregatedFit>;
 
 }  // namespace myalloc

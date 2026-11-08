@@ -1,0 +1,4 @@
+workload,ops,oom,peak_requested,peak_in_use,high_water,internal_overhead,utilisation,free_blocks_end,free_bytes_end,largest_free_end,avg_search_steps
+random_16B_4KiB,200000,0,1861741,1905408,2292920,1.023,0.812,375,14898880,14484288,4.7
+app_like,200000,0,4771855,4824512,6550584,1.011,0.728,210,29198608,27171136,1.2
+phase_shift,220000,0,2279902,2287584,2287592,1.003,0.997,1,16777200,16777200,1.0

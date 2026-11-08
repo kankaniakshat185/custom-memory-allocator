@@ -99,6 +99,8 @@ The profile separates what size classes would and wouldn't fix:
 
 So: segregated lists are justified by **memory and worst-case latency**, not by average speed. That decision, and its scope, is for the plan (ADR-011).
 
+> **Measured afterwards ([ADR-011](011-segregated-free-lists.md)): the "would not fix average speed" prediction was wrong for app-like.** Segregated fits made app-like 29% faster than first-fit, not through search but through the free path this ADR found dominant: exact-size reuse cut splits and merges from 0.94 to 0.14 per operation. The prediction for random sizes held (8.6% slower, due to range-bin walks).
+
 ### Other consequences
 - ADR-001's hypothesis ("allocation cost is dominated by free-list search length") is **refuted for first-fit on typical workloads** (search ~9–10% of time, ~2 nodes per malloc) and **supported for best-fit and fragmented or adversarial heaps** (92–98% search).
 - If anyone optimises the average case further, the first target is the free path (`release` + unlinking, ~51% of time), then branchiness generally. The memory system is not the bottleneck there.
