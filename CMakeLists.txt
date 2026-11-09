@@ -31,6 +31,14 @@ option(MYALLOC_ASAN "Build with AddressSanitizer" OFF)
 option(MYALLOC_TSAN "Build with ThreadSanitizer" OFF)
 
 add_compile_options(-Wall -Wextra -Wpedantic)
+# Sized operator delete (C++14) is on by default in GCC and in Clang >= 19, but
+# not in Clang 18, where libstdc++'s <new> then omits its declarations and the
+# operator new/delete tests fail to compile (ADR-015). Enable it everywhere.
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-fsized-deallocation MYALLOC_HAS_SIZED_DEALLOC)
+if(MYALLOC_HAS_SIZED_DEALLOC)
+  add_compile_options(-fsized-deallocation)
+endif()
 if(MYALLOC_UBSAN)
   add_compile_options(-fsanitize=undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=undefined)
@@ -114,14 +122,26 @@ target_link_libraries(myalloc_tests_bestfit PRIVATE myalloc_bestfit GTest::gtest
 target_include_directories(myalloc_tests_bestfit PRIVATE src)
 gtest_discover_tests(myalloc_tests_bestfit TEST_PREFIX "bestfit.")
 
-# Every allocation in this binary, GoogleTest's included, goes through the heap.
-add_executable(myalloc_new_tests tests/test_new_delete.cpp)
-target_link_libraries(myalloc_new_tests PRIVATE myalloc_new GTest::gtest_main)
-target_include_directories(myalloc_new_tests PRIVATE src)
-gtest_discover_tests(myalloc_new_tests TEST_PREFIX "newdelete.")
+# Targets that replace global operator new/delete. On Linux, ThreadSanitizer's
+# runtime (libclang_rt.tsan_cxx) defines every form itself, non-weak, so they
+# cannot link there: multiple definition (ADR-015). macOS's TSan runtime is a
+# dylib that allows replacement, so the macOS TSan job still runs them.
+if(MYALLOC_TSAN AND NOT APPLE)
+  set(MYALLOC_REPLACES_NEW OFF)
+else()
+  set(MYALLOC_REPLACES_NEW ON)
+endif()
 
-add_executable(stl_demo examples/stl_demo.cpp)
-target_link_libraries(stl_demo PRIVATE myalloc_new)
+if(MYALLOC_REPLACES_NEW)
+  # Every allocation in this binary, GoogleTest's included, goes through the heap.
+  add_executable(myalloc_new_tests tests/test_new_delete.cpp)
+  target_link_libraries(myalloc_new_tests PRIVATE myalloc_new GTest::gtest_main)
+  target_include_directories(myalloc_new_tests PRIVATE src)
+  gtest_discover_tests(myalloc_new_tests TEST_PREFIX "newdelete.")
+
+  add_executable(stl_demo examples/stl_demo.cpp)
+  target_link_libraries(stl_demo PRIVATE myalloc_new)
+endif()
 
 add_executable(footprint_probe bench/footprint_probe.cpp)
 target_link_libraries(footprint_probe PRIVATE myalloc)
@@ -137,14 +157,16 @@ target_include_directories(freelist_length PRIVATE src)
 
 # The same container workloads under the platform allocator and under myalloc.
 add_executable(stl_bench_system bench/stl_bench.cpp)
-add_executable(stl_bench_myalloc bench/stl_bench.cpp)
-target_link_libraries(stl_bench_myalloc PRIVATE myalloc_new)
-target_compile_definitions(stl_bench_myalloc PRIVATE STL_BENCH_MYALLOC)
-# Bench-only: the same workloads with new/delete backed by heap + slab (ADR-015).
-add_executable(stl_bench_slab bench/stl_bench.cpp bench/new_delete_slab.cpp)
-target_link_libraries(stl_bench_slab PRIVATE myalloc)
-target_include_directories(stl_bench_slab PRIVATE src)
-target_compile_definitions(stl_bench_slab PRIVATE STL_BENCH_SLAB)
+if(MYALLOC_REPLACES_NEW)
+  add_executable(stl_bench_myalloc bench/stl_bench.cpp)
+  target_link_libraries(stl_bench_myalloc PRIVATE myalloc_new)
+  target_compile_definitions(stl_bench_myalloc PRIVATE STL_BENCH_MYALLOC)
+  # Bench-only: the same workloads with new/delete backed by heap + slab (ADR-015).
+  add_executable(stl_bench_slab bench/stl_bench.cpp bench/new_delete_slab.cpp)
+  target_link_libraries(stl_bench_slab PRIVATE myalloc)
+  target_include_directories(stl_bench_slab PRIVATE src)
+  target_compile_definitions(stl_bench_slab PRIVATE STL_BENCH_SLAB)
+endif()
 
 # Multithreaded throughput and scaling (ADR-016): the shipped per-thread
 # arenas, one global lock (MYALLOC_ARENAS=1), and, for the single-thread cost

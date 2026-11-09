@@ -95,3 +95,24 @@ C++17 has 20 replaceable forms: 8 `operator new` (plain and array, each also `no
   - **peak RSS no more than 10% higher** on any workload.
 
   Switching also requires removing the slab's `std::vector` metadata (so `init` cannot re-enter `operator new`) and bringing the slab into `my_alloc_stats` and the leak report. Otherwise the replacement stays on the heap and this ADR records why.
+
+## Correction (2026-11-09): Linux CI was red from this phase until Phase 17
+The two Linux clang jobs failed at the build step on the Phase 15 and Phase 16 commits. All macOS jobs and Linux g++ passed, and this ADR's Validation section, written from local macOS runs, did not catch it. Reproduced in an Ubuntu 24.04 container (clang 18.1.3), there were two separate causes:
+
+1. **ASan + UBSan: compile error.** `::operator delete(p, n)` in `test_new_delete.cpp` had no matching declaration.
+   - **Why:** libstdc++'s `<new>` declares the sized forms only when `__cpp_sized_deallocation` is defined. GCC enables sized deallocation by default, and Clang does so only from version 19.
+   - **Fix:** the build now passes `-fsized-deallocation` wherever the compiler accepts it, so Clang 18 matches GCC.
+2. **ThreadSanitizer (added in Phase 16): link error.** Every form gave `multiple definition of operator new(unsigned long)`.
+   - **Why:** clang links TSan's C++ runtime, `libclang_rt.tsan_cxx`, which defines all of them, and a program cannot replace them there. ASan's runtime defines them weakly, so ASan builds link.
+   - **Fix:** in TSan builds on Linux, the four targets that replace global `new` (`myalloc_new_tests`, `stl_demo`, `stl_bench_myalloc`, `stl_bench_slab`) are not built. The macOS TSan job still runs them, because its runtime is a dylib that allows replacement.
+
+After the fixes, all suites pass in the container:
+
+| Linux build | Result |
+|---|---|
+| clang ASan + UBSan | 439/439 |
+| clang TSan | 426/426 (the 13 replacement tests are not built), 0 reports |
+| g++ UBSan | 439/439, warning-free |
+
+g++ had also flagged the deliberate foreign `delete` in a death test (`-Wfree-nonheap-object`). The pointer now passes through a `volatile`, so the compiler cannot see its origin.
+

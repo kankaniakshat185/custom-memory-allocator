@@ -213,7 +213,10 @@ TEST(NewDeleteDeath, DeleteOfForeignPointerAborts) {
     EXPECT_DEATH(
         {
             static int not_from_new = 0;
-            ::operator delete(&not_from_new);
+            // volatile hides the origin, or GCC warns at compile time
+            // (-Wfree-nonheap-object) about the very misuse this tests.
+            int* volatile p = &not_from_new;
+            ::operator delete(p);
         },
         "invalid pointer");
 }

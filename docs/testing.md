@@ -21,14 +21,16 @@ Coverage (clang source-based):
 
 ```sh
 cmake -S . -B build-cov -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
-cmake --build build-cov -j --target myalloc_tests myalloc_tests_bestfit
-for b in myalloc_tests myalloc_tests_bestfit; do LLVM_PROFILE_FILE="cov-$b-%p.profraw" ./build-cov/$b; done
+B="myalloc_tests myalloc_tests_firstfit myalloc_tests_bestfit myalloc_new_tests"
+cmake --build build-cov -j --target $B
+for b in $B; do LLVM_PROFILE_FILE="cov-$b-%p.profraw" ./build-cov/$b; done
 xcrun llvm-profdata merge -sparse cov-*.profraw -o cov.profdata
-xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_tests_bestfit -instr-profile=cov.profdata src/ include/
+xcrun llvm-cov report ./build-cov/myalloc_tests -object ./build-cov/myalloc_tests_firstfit \
+  -object ./build-cov/myalloc_tests_bestfit -object ./build-cov/myalloc_new_tests -instr-profile=cov.profdata src/ include/
 ```
 
-Both test binaries must also pass when run directly (not only via `ctest`, which isolates every test in its own process): tests that corrupt the process-wide heap must do so inside the death-test child.
+Every test binary must also pass when run directly (not only via `ctest`, which isolates every test in its own process): tests that corrupt the process-wide heap must do so inside the death-test child.
 
-CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) runs on every push: both test binaries under UBSan and under ASan + UBSan on macOS and Linux (GCC, Clang); both binaries run directly as well as through `ctest`; the footprint-determinism check `bench/scripts/check_footprint.sh` (probe output must match the committed reference CSVs byte for byte, on both platforms); a benchmark-harness smoke run; and the coverage report.
+CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)) runs on every push: all four test binaries under UBSan, ASan + UBSan and ThreadSanitizer on macOS and Linux (GCC, Clang; under Linux TSan the `operator new` binary is not built, see ADR-015's correction); the binaries run directly as well as through `ctest`; the footprint-determinism check `bench/scripts/check_footprint.sh` (probe output must match the committed reference CSVs byte for byte, on both platforms); smoke runs of the benchmark harnesses and the STL demo; and the coverage report.
 
 Sanitizers: UBSan is on in test builds. ThreadSanitizer: `cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_TSAN=ON`; a reported race makes the test process exit non-zero. ASan + UBSan: `cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DMYALLOC_ASAN=ON -DMYALLOC_UBSAN=ON` (needs Xcode's clang; see [environment.md](environment.md)). `check()` remains the primary guard against in-arena corruption, which ASan cannot see.

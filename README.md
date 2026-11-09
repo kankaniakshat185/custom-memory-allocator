@@ -26,7 +26,7 @@ A heap allocator built from scratch in C++17: `my_malloc`, `my_free`, `my_reallo
 *   **Thread-safe C API with per-thread arenas.** Each thread allocates from its own arena (up to 8) under its own lock. Frees can come from any thread, and `fork()` is safe. One global lock *collapsed* to 0.2–0.3× of single-thread throughput at 2 threads; arenas scale 2.9–3.5× at 4 threads, against about 2.1× for libmalloc, at under 1% more instructions than that global lock. Padding the arena slots to separate cache lines doubled 4-thread throughput ([ADR-016](docs/adr/016-thread-safety.md)).
 *   **Allocation tracking and leak reporting.** `my_alloc_stats()` returns bytes and blocks in use, peak, free space and fragmentation in O(1); `my_report_leaks()` lists every live block; `MYALLOC_LEAK_REPORT=1` prints that report at exit. No cost on the hot path.
 *   **Strict checks at the API boundary.** Double frees, pointers outside the arena, misaligned pointers and requests too large for the arena (including `calloc` overflow) are rejected. Bad frees abort with a named diagnostic; oversized requests return `NULL`.
-*   **439 test runs.** 142 tests built three times (once per fit policy), plus 13 in a binary where every allocation, GoogleTest's included, goes through the replaced `operator new`. They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan and under ThreadSanitizer. The allocator core has 99.7% line and 100% function coverage.
+*   **439 test runs.** 142 tests built three times (once per fit policy), plus 13 in a binary where every allocation, GoogleTest's included, goes through the replaced `operator new`. They cover behaviour, a randomised stress suite that checks every heap invariant after *every* operation, a 300-seed use-after-free fuzz test, and C API integration running `std::vector`, `std::map` and `std::basic_string` on the allocator. All pass under AddressSanitizer + UBSan and under ThreadSanitizer. The allocator core has 99.3% line and 100% function coverage.
 *   **The checks are themselves tested.** 22 deliberate mutations (an invariant, a merge, a hardening check, a bin bitmap, slab bookkeeping, the `new_handler` loop, the arena locks and fork handlers broken on purpose) each confirmed that a test fails, except one, which showed a hardening check was redundant; it was removed.
 *   **9-job CI pipeline** (GitHub Actions) on every push: a blocking format check, sanitized builds (UBSan, ASan, TSan) and all 439 test runs on macOS and Linux (GCC and Clang), a regression check that the deterministic footprint probe still matches the committed results byte for byte, a benchmark smoke run, and a coverage report.
 *   **Measured, not argued.** Deterministic footprint measurements and a trace-replay timing harness compare against the macOS system allocator, with its small-object fast path as a control. Instruments profiles (Time Profiler attributed through inlining, plus the CPU Counters bottleneck breakdown) explain *why* the numbers look the way they do.
@@ -63,11 +63,11 @@ header word = block size (multiple of 16) | alloc bit | prev-alloc bit
 | Testing | GoogleTest: 155 tests across 16 files; 142 built once per fit policy, plus 13 against the `operator new` replacement (439 runs) |
 | Sanitizers | AddressSanitizer + UndefinedBehaviorSanitizer (`MYALLOC_ASAN`, `MYALLOC_UBSAN`), ThreadSanitizer (`MYALLOC_TSAN`) |
 | Concurrency | `os_unfair_lock` per arena on macOS (`std::mutex` elsewhere), `pthread_atfork` handlers |
-| Coverage | clang source-based coverage (`llvm-cov`): allocator core 99.7% lines, 100% functions |
+| Coverage | clang source-based coverage (`llvm-cov`): allocator core 99.3% lines, 100% functions |
 | Benchmarking | Custom trace-replay wall-clock harness (batch timing, median + IQR over 15 reps) and a deterministic footprint probe |
 | Charts | matplotlib, generated from the committed result files (`bench/scripts/plot.py`), light and dark variants |
 | Profiling | Apple Instruments via `xctrace`: Time Profiler (attributed through inlining with `atos -i`) and CPU Counters bottleneck breakdown |
-| CI | GitHub Actions, 7 jobs on every push: clang-format check; macOS UBSan; macOS ASan + UBSan; macOS Release with footprint-determinism check and harness smoke run; Linux GCC + UBSan; Linux Clang + ASan + UBSan; coverage report |
+| CI | GitHub Actions, 9 jobs on every push: clang-format check; macOS UBSan; macOS ASan + UBSan; macOS TSan; macOS Release with footprint-determinism check and harness smoke runs; Linux GCC + UBSan; Linux Clang + ASan + UBSan; Linux Clang + TSan; coverage report |
 
 ## Engineering Decisions That Mattered
 
@@ -242,20 +242,20 @@ These are scope boundaries, not oversights (see [docs/plan.md](docs/plan.md)):
 
 All 439 runs pass under UBSan, under ASan + UBSan and under ThreadSanitizer (0 reports).
 
-**Coverage** (clang source-based, both binaries merged): allocator core 99.7% lines, 100% functions, 86.3% branches. Including the C API glue, 97.1% lines and 100% functions. The uncovered glue lines are abort diagnostics, which death tests do execute, but in child processes that `abort()` before writing profile data ([report](docs/results/coverage.md)).
+**Coverage** (clang source-based, all four test binaries merged): allocator core 99.3% lines, 100% functions, 89.1% branches. Across all of `src/` and `include/` (C API, slab, `operator new`, arenas), 95.2% lines and 98.7% functions. The uncovered lines are mostly abort diagnostics and the fork handlers' child side: tests do execute them, but in child processes that end without writing profile data ([report](docs/results/coverage.md)).
 
 ## Code Quality
 
 *   **Concurrency confined to one layer.** Locks, atomics and `thread_local` appear only in `src/myalloc.cpp` and `src/lock.h` (verified by grep); `BasicHeap` and the slab contain no synchronisation. Every call holds at most one arena lock at a time. Only the fork handlers take several, always the creation mutex first, then arenas in index order, so there is no lock-order cycle. ThreadSanitizer runs the whole suite in CI.
 *   **Warning-clean** under `-Wall -Wextra -Wpedantic`, in Debug, Release, ASan and coverage builds.
 *   **Dead code removed when found.** Coverage exposed a helper overload left unused after a hardening iteration, and it was deleted.
-*   **CI on every push** ([`ci.yml`](.github/workflows/ci.yml)): every test under UBSan and under ASan + UBSan on macOS and Linux (GCC 13 and Clang), warnings visible in the logs, a footprint-determinism check that fails if a change alters any placement decision, and coverage published as a job summary.
+*   **CI on every push** ([`ci.yml`](.github/workflows/ci.yml)): every test under UBSan, ASan + UBSan and ThreadSanitizer on macOS and Linux (GCC 13 and Clang 18), warnings visible in the logs, a footprint-determinism check that fails if a change alters any placement decision, and coverage published as a job summary.
 *   **`clang-format`, blocking in CI** (pinned 22.1.8, [`.clang-format`](.clang-format)): a formatting diff fails the build. The style was chosen to match the existing code with the least churn.
 *   **Not set up yet:** `clang-tidy`.
 
 ## Local Development Initialization
 
-The project fetches GoogleTest automatically via CMake `FetchContent` on first configure (network needed once). The allocator itself has no dependencies beyond POSIX `mmap`. Developed on macOS (Xcode clang); on Apple Silicon CMake forces native arm64 builds. It also builds warning-free and passes all tests on Linux with GCC 13 and Clang 18 (Ubuntu 24.04; arm64 locally through Phase 14, x86_64 in CI). All published benchmark numbers are from macOS.
+The project fetches GoogleTest automatically via CMake `FetchContent` on first configure (network needed once). The allocator itself has no dependencies beyond POSIX `mmap`. Developed on macOS (Xcode clang); on Apple Silicon CMake forces native arm64 builds. It also builds warning-free and passes all tests on Linux with GCC 13 and Clang 18 (Ubuntu 24.04, arm64 locally and x86_64 in CI). Under Linux ThreadSanitizer the 13 `operator new` replacement tests are not built: TSan's runtime defines `operator new` itself ([ADR-015](docs/adr/015-operator-new-and-stl-allocator.md#correction-2026-11-09-linux-ci-was-red-from-this-phase-until-phase-17)). All published benchmark numbers are from macOS.
 
 ```bash
 # Correctness: 142 tests x 3 fit policies + 13 operator new tests, with UBSan
